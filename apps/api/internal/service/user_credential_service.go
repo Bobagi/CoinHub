@@ -20,17 +20,26 @@ type CredentialStatus struct {
 	ConfiguredEnvironments []string
 }
 
+// ActiveEnvironmentStore persists each user's chosen active Binance environment, independent of
+// whether they have keys for it. Implemented by the user repository.
+type ActiveEnvironmentStore interface {
+	GetActiveBinanceEnvironment(lookupContext context.Context, userIdentifier int64) (string, error)
+	SetActiveBinanceEnvironment(updateContext context.Context, userIdentifier int64, environmentName string) error
+}
+
 // UserCredentialService validates, encrypts, stores, and retrieves per-user Binance credentials.
 type UserCredentialService struct {
 	repository        repository.UserBinanceCredentialRepository
+	environmentStore  ActiveEnvironmentStore
 	cipher            *security.SecretCipher
 	testnetBaseURL    string
 	productionBaseURL string
 }
 
-func NewUserCredentialService(repositoryInstance repository.UserBinanceCredentialRepository, cipher *security.SecretCipher, testnetBaseURL string, productionBaseURL string) *UserCredentialService {
+func NewUserCredentialService(repositoryInstance repository.UserBinanceCredentialRepository, environmentStore ActiveEnvironmentStore, cipher *security.SecretCipher, testnetBaseURL string, productionBaseURL string) *UserCredentialService {
 	return &UserCredentialService{
 		repository:        repositoryInstance,
+		environmentStore:  environmentStore,
 		cipher:            cipher,
 		testnetBaseURL:    testnetBaseURL,
 		productionBaseURL: productionBaseURL,
@@ -68,19 +77,26 @@ func (service *UserCredentialService) SaveAndValidate(operationContext context.C
 		return secretEncryptionError
 	}
 
-	return service.repository.SaveCredentialForUser(operationContext, userIdentifier, domain.BinanceCredentialRecord{
+	saveError := service.repository.SaveCredentialForUser(operationContext, userIdentifier, domain.BinanceCredentialRecord{
 		APIKey:          encryptedAPIKey,
 		APISecret:       encryptedAPISecret,
 		EnvironmentName: normalizedEnvironment,
 		APIBaseURL:      baseURL,
 		IsActive:        true,
 	})
+	if saveError != nil {
+		return saveError
+	}
+	// Connecting keys also makes that environment the active one.
+	return service.environmentStore.SetActiveBinanceEnvironment(operationContext, userIdentifier, normalizedEnvironment)
 }
 
-// LoadActiveEnvironmentConfiguration returns the decrypted active credential ready for the Binance
-// clients, or (nil, nil) when the user has none stored.
+// LoadActiveEnvironmentConfiguration returns the decrypted credential for the user's active
+// environment, ready for the Binance clients, or (nil, nil) when the active environment has no keys
+// (i.e. the user switched to it but has not connected yet).
 func (service *UserCredentialService) LoadActiveEnvironmentConfiguration(operationContext context.Context, userIdentifier int64) (*domain.BinanceEnvironmentConfiguration, error) {
-	record, loadError := service.repository.LoadActiveCredentialForUser(operationContext, userIdentifier)
+	activeEnvironment := service.ActiveEnvironmentName(operationContext, userIdentifier)
+	record, loadError := service.repository.LoadLatestCredentialForUserByEnvironment(operationContext, userIdentifier, activeEnvironment)
 	if loadError != nil {
 		return nil, loadError
 	}
@@ -108,27 +124,29 @@ func (service *UserCredentialService) LoadActiveEnvironmentConfiguration(operati
 	}, nil
 }
 
-// ActivateEnvironment switches the user's active environment to one they already have keys for.
+// ActivateEnvironment switches the user's active environment. Unlike before, this no longer requires
+// stored keys: a user can switch to PRODUCTION (and see it flagged "not connected") before saving
+// credentials. If the environment does have a stored credential, its is_active flag is synced too.
 func (service *UserCredentialService) ActivateEnvironment(operationContext context.Context, userIdentifier int64, environmentName string) error {
 	normalizedEnvironment := domain.NormalizeBinanceEnvironment(environmentName)
-	existing, loadError := service.repository.LoadLatestCredentialForUserByEnvironment(operationContext, userIdentifier, normalizedEnvironment)
-	if loadError != nil {
-		return loadError
+	if setError := service.environmentStore.SetActiveBinanceEnvironment(operationContext, userIdentifier, normalizedEnvironment); setError != nil {
+		return setError
 	}
-	if existing == nil {
-		return errors.New("no Binance credentials are stored for the selected environment")
+	// Best-effort: keep the credential is_active flag aligned when keys exist for this environment.
+	if existing, _ := service.repository.LoadLatestCredentialForUserByEnvironment(operationContext, userIdentifier, normalizedEnvironment); existing != nil {
+		_ = service.repository.ActivateEnvironmentForUser(operationContext, userIdentifier, normalizedEnvironment)
 	}
-	return service.repository.ActivateEnvironmentForUser(operationContext, userIdentifier, normalizedEnvironment)
+	return nil
 }
 
-// ActiveEnvironmentName returns the user's active Binance environment, defaulting to TESTNET when the
-// user has not connected any credentials yet. Used to scope settings/operations to one environment.
+// ActiveEnvironmentName returns the user's active Binance environment preference, defaulting to
+// TESTNET. Used to scope settings/operations to one environment.
 func (service *UserCredentialService) ActiveEnvironmentName(operationContext context.Context, userIdentifier int64) string {
-	record, loadError := service.repository.LoadActiveCredentialForUser(operationContext, userIdentifier)
-	if loadError == nil && record != nil {
-		return record.EnvironmentName
+	environmentName, loadError := service.environmentStore.GetActiveBinanceEnvironment(operationContext, userIdentifier)
+	if loadError != nil || environmentName == "" {
+		return domain.BinanceEnvironmentTestnet
 	}
-	return domain.BinanceEnvironmentTestnet
+	return environmentName
 }
 
 // DeleteCredentials removes the user's stored Binance keys for an environment from the database and
@@ -145,9 +163,15 @@ func (service *UserCredentialService) GetStatus(operationContext context.Context
 		return CredentialStatus{}, listError
 	}
 
-	status := CredentialStatus{ConfiguredEnvironments: configuredEnvironments}
+	activeEnvironment := service.ActiveEnvironmentName(operationContext, userIdentifier)
+	status := CredentialStatus{
+		ConfiguredEnvironments: configuredEnvironments,
+		ActiveEnvironment:      activeEnvironment,
+	}
 
-	record, loadError := service.repository.LoadActiveCredentialForUser(operationContext, userIdentifier)
+	// HasActiveCredential means the ACTIVE environment has keys. When the user has switched to an
+	// environment they have not connected yet, this is false (the UI then shows it as not connected).
+	record, loadError := service.repository.LoadLatestCredentialForUserByEnvironment(operationContext, userIdentifier, activeEnvironment)
 	if loadError != nil {
 		return CredentialStatus{}, loadError
 	}
@@ -156,7 +180,6 @@ func (service *UserCredentialService) GetStatus(operationContext context.Context
 	}
 
 	status.HasActiveCredential = true
-	status.ActiveEnvironment = record.EnvironmentName
 	status.MaskedAPIKey = service.maskAPIKey(record.APIKey)
 	return status, nil
 }

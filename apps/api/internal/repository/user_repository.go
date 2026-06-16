@@ -27,6 +27,8 @@ type UserRepository interface {
 	UpdateDisplayName(updateContext context.Context, userIdentifier int64, displayName string) (*domain.User, error)
 	UpdatePasswordHash(updateContext context.Context, userIdentifier int64, passwordHash string) error
 	MarkEmailVerified(updateContext context.Context, userIdentifier int64) error
+	GetActiveBinanceEnvironment(lookupContext context.Context, userIdentifier int64) (string, error)
+	SetActiveBinanceEnvironment(updateContext context.Context, userIdentifier int64, environmentName string) error
 	DeleteUser(deletionContext context.Context, userIdentifier int64) error
 }
 
@@ -183,6 +185,32 @@ func (repository *PostgresUserRepository) MarkEmailVerified(updateContext contex
 		updateContext,
 		`UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $1`,
 		userIdentifier,
+	)
+	return executionError
+}
+
+func (repository *PostgresUserRepository) GetActiveBinanceEnvironment(lookupContext context.Context, userIdentifier int64) (string, error) {
+	var environmentName string
+	scanError := repository.Database.QueryRowContext(
+		lookupContext,
+		`SELECT active_binance_environment FROM users WHERE id = $1`,
+		userIdentifier,
+	).Scan(&environmentName)
+	if errors.Is(scanError, sql.ErrNoRows) {
+		return "", ErrUserNotFound
+	}
+	if scanError != nil {
+		return "", scanError
+	}
+	return environmentName, nil
+}
+
+func (repository *PostgresUserRepository) SetActiveBinanceEnvironment(updateContext context.Context, userIdentifier int64, environmentName string) error {
+	_, executionError := repository.Database.ExecContext(
+		updateContext,
+		`UPDATE users SET active_binance_environment = $2, updated_at = NOW() WHERE id = $1`,
+		userIdentifier,
+		environmentName,
 	)
 	return executionError
 }

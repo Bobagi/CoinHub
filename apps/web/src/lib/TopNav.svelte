@@ -43,7 +43,7 @@
     <span class="pill binance" title="Binance">
       <span class="dot" class:on={$binanceStatus.has_active_credential}></span>
       {$t('header.binance')}
-      {$binanceStatus.has_active_credential ? $binanceStatus.active_environment : $t('header.notConnected')}
+      {$binanceStatus.active_environment || $t('header.notConnected')}{#if $binanceStatus.active_environment && !$binanceStatus.has_active_credential} ({$t('header.noKey')}){/if}
     </span>
   {/if}
   <LanguageDropdown compact />

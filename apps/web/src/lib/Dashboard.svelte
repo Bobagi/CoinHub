@@ -120,8 +120,9 @@
   $: botActive = botEnabled && !!settings && settings.capital_threshold > 0
   $: connected = !!credentials?.has_active_credential
   $: isAdmin = !!$currentUser?.is_admin
-  // The Trade tab needs a Binance environment (Testnet or Production) before anything can run.
-  $: tradeLocked = (credentials?.configured_environments?.length ?? 0) === 0
+  // The Trade tab needs the ACTIVE environment to have keys before anything can run. (You can switch
+  // to an environment without keys; it is then "active but not connected" and the tab stays locked.)
+  $: tradeLocked = !credentials?.has_active_credential
   $: selectedRobot = robots.find((robot) => robot.id === selectedRobotId) || null
   $: canCreateRobot = robotLimit === 0 || robots.length < robotLimit
   $: robotProductionNeedsLive = credentials?.active_environment === 'PRODUCTION' && !!settings && !settings.live_trading_enabled
@@ -156,7 +157,8 @@
   $: hoursUntilNext = Math.max(1, Math.round((nextRun.getTime() - Date.now()) / 3600000))
 
   const isConfigured = (environment: string) => !!credentials?.configured_environments?.includes(environment)
-  const isActive = (environment: string) => !!credentials?.has_active_credential && credentials?.active_environment === environment
+  // The active environment (the user's choice), regardless of whether it has keys yet.
+  const isActive = (environment: string) => credentials?.active_environment === environment
 
   function publishBinanceStatus(status: CredentialStatus) {
     binanceStatus.set({ has_active_credential: status.has_active_credential, active_environment: status.active_environment })
@@ -243,13 +245,14 @@
     }
   }
 
-  // Selecting an environment targets it for the key form and, if it already has keys, activates it.
+  // Selecting an environment makes it the active one — even if it has no keys yet (it then shows as
+  // "active but not connected"). The key form below always targets the selected environment.
   async function selectEnvironment(environment: string) {
     credEnv = environment
     envMsg = ''
     envErr = ''
     confirmingDelete = false
-    if (!isConfigured(environment) || isActive(environment)) return
+    if (isActive(environment)) return
     envBusy = environment
     try {
       await api.activateEnvironment(environment)
@@ -259,6 +262,7 @@
       loadRobots()
       selectedRobotId = null
       creatingRobot = false
+      credEnv = environment
       envMsg = $t('binance.activated')
     } catch (e) {
       envErr = (e as Error).message
@@ -533,8 +537,10 @@
               on:click={() => selectEnvironment(environment)}
             >
               <span>{environment === 'TESTNET' ? $t('binance.testnet') : $t('binance.production')}</span>
-              {#if isActive(environment)}
+              {#if isActive(environment) && isConfigured(environment)}
                 <span class="tag on">✓ {$t('binance.active')}</span>
+              {:else if isActive(environment)}
+                <span class="tag warn">✓ {$t('binance.active')} · ⚠ {$t('binance.noKey')}</span>
               {:else if !isConfigured(environment)}
                 <span class="tag">· {$t('binance.notConfigured')}</span>
               {/if}
@@ -547,8 +553,10 @@
       {#if envMsg}<p class="success mt-2">{envMsg}</p>{/if}
       {#if envErr}<p class="error mt-2">{envErr}</p>{/if}
 
-      {#if isActive(credEnv) && credentials}
+      {#if isActive(credEnv) && credentials?.has_active_credential}
         <div class="pill mt-4">{$t('binance.activePrefix')}: {credEnv} • {credentials.masked_api_key}</div>
+      {:else if isActive(credEnv)}
+        <p class="warn-box mt-4">⚠ {$t('binance.activeNoKey')}</p>
       {:else}
         <p class="muted mt-4">{$t('binance.connectHint')}</p>
       {/if}
@@ -966,6 +974,8 @@
   .env-btn.active { background: var(--brand); border-color: var(--brand); color: var(--on-brand); }
   .env-btn .tag { font-weight: 600; opacity: 0.75; }
   .env-btn .tag.on { opacity: 1; }
+  .env-btn .tag.warn { opacity: 1; }
+  .warn-box { border: 1px solid var(--amber); border-left: 3px solid var(--amber); border-radius: var(--radius-md); background: var(--surface-2); padding: var(--space-3) var(--space-4); color: var(--amber); line-height: 1.5; }
 
   .bot-status { border: 1px solid var(--border); border-left: 3px solid var(--amber); border-radius: var(--radius-md); background: var(--surface-2); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); }
   .bot-status.on { border-left-color: var(--green); }
