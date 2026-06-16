@@ -43,6 +43,18 @@ locale.subscribe((value) => {
 type Dictionary = Record<string, string>
 
 const en: Dictionary = {
+  'stepup.title': 'Confirm your identity',
+  'stepup.intro': 'For your security, please re-confirm before changing money-related settings.',
+  'stepup.passwordLabel': 'Password',
+  'stepup.passwordPlaceholder': 'Your account password',
+  'stepup.confirm': 'Confirm',
+  'stepup.or': 'or',
+  'stepup.googleButton': 'Re-confirm with Google',
+  'stepup.googleOnlyHint': 'Your account signs in with Google — re-confirm there.',
+  'stepup.cancel': 'Cancel',
+  'stepup.confirmedRetry': 'Identity confirmed. Please redo your last action.',
+  'stepup.failed': 'Could not confirm your identity. Please try again.',
+  'stepup.unavailable': 'Re-confirmation with Google is unavailable right now.',
   'app.loading': 'Loading…',
   'login.tagline': 'Crypto trading automation and your B3 portfolio, in one place.',
   'login.signIn': 'Sign in',
@@ -316,6 +328,18 @@ const en: Dictionary = {
 }
 
 const pt: Dictionary = {
+  'stepup.title': 'Confirme sua identidade',
+  'stepup.intro': 'Por segurança, reconfirme antes de alterar configurações que envolvem dinheiro.',
+  'stepup.passwordLabel': 'Senha',
+  'stepup.passwordPlaceholder': 'Senha da sua conta',
+  'stepup.confirm': 'Confirmar',
+  'stepup.or': 'ou',
+  'stepup.googleButton': 'Reconfirmar com Google',
+  'stepup.googleOnlyHint': 'Sua conta entra com Google — reconfirme por lá.',
+  'stepup.cancel': 'Cancelar',
+  'stepup.confirmedRetry': 'Identidade confirmada. Refaça a última ação.',
+  'stepup.failed': 'Não foi possível confirmar sua identidade. Tente novamente.',
+  'stepup.unavailable': 'A reconfirmação com Google está indisponível no momento.',
   'app.loading': 'Carregando…',
   'login.tagline': 'Automação de trade de cripto e sua carteira da B3, em um só lugar.',
   'login.signIn': 'Entrar',
@@ -589,6 +613,18 @@ const pt: Dictionary = {
 }
 
 const es: Dictionary = {
+  'stepup.title': 'Confirma tu identidad',
+  'stepup.intro': 'Por seguridad, vuelve a confirmar antes de cambiar configuraciones de dinero.',
+  'stepup.passwordLabel': 'Contraseña',
+  'stepup.passwordPlaceholder': 'Contraseña de tu cuenta',
+  'stepup.confirm': 'Confirmar',
+  'stepup.or': 'o',
+  'stepup.googleButton': 'Reconfirmar con Google',
+  'stepup.googleOnlyHint': 'Tu cuenta inicia sesión con Google — reconfírmalo ahí.',
+  'stepup.cancel': 'Cancelar',
+  'stepup.confirmedRetry': 'Identidad confirmada. Repite la última acción.',
+  'stepup.failed': 'No se pudo confirmar tu identidad. Inténtalo de nuevo.',
+  'stepup.unavailable': 'La reconfirmación con Google no está disponible ahora.',
   'app.loading': 'Cargando…',
   'login.tagline': 'Automatización de trading de cripto y tu cartera de la B3, en un solo lugar.',
   'login.signIn': 'Iniciar sesión',

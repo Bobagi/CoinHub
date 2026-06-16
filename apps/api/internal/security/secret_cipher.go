@@ -62,6 +62,43 @@ func (secretCipher *SecretCipher) EmailFingerprint(email string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
+// SignValue returns "value.signature", where signature is a keyed HMAC-SHA256 over the value. It is
+// used to make a short-lived cookie tamper-evident (e.g. the Google step-up state cookie that has to
+// survive the cross-site OAuth redirect). Returns "" when no key is configured.
+func (secretCipher *SecretCipher) SignValue(value string) string {
+	if secretCipher == nil || len(secretCipher.keyBytes) == 0 {
+		return ""
+	}
+	return value + "." + hex.EncodeToString(secretCipher.signature(value))
+}
+
+// VerifyValue checks a "value.signature" string produced by SignValue and returns the value when the
+// signature is valid.
+func (secretCipher *SecretCipher) VerifyValue(signed string) (string, bool) {
+	if secretCipher == nil || len(secretCipher.keyBytes) == 0 {
+		return "", false
+	}
+	separatorIndex := strings.LastIndexByte(signed, '.')
+	if separatorIndex <= 0 {
+		return "", false
+	}
+	value := signed[:separatorIndex]
+	providedSignature, decodeError := hex.DecodeString(signed[separatorIndex+1:])
+	if decodeError != nil {
+		return "", false
+	}
+	if !hmac.Equal(providedSignature, secretCipher.signature(value)) {
+		return "", false
+	}
+	return value, true
+}
+
+func (secretCipher *SecretCipher) signature(value string) []byte {
+	mac := hmac.New(sha256.New, secretCipher.keyBytes)
+	mac.Write([]byte("signed-cookie-value:" + value))
+	return mac.Sum(nil)
+}
+
 // EncryptString returns a base64-encoded payload of (nonce || ciphertext || auth tag).
 func (secretCipher *SecretCipher) EncryptString(plainText string) (string, error) {
 	nonce := make([]byte, secretCipher.authenticatedCipher.NonceSize())

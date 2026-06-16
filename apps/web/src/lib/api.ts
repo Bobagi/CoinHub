@@ -1,6 +1,6 @@
 // Typed client for the Coin Hub JSON API. Cookies carry the session, so every call uses
 // credentials: 'include'. Paths are relative (same-origin: dev proxy or nginx in production).
-import { showVerifyModal } from './stores'
+import { showVerifyModal, requestStepUp } from './stores'
 
 export interface User {
   id: number
@@ -87,7 +87,7 @@ export interface Execution {
   initiated_by: string
 }
 
-async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function request<T>(method: string, path: string, body?: unknown, isStepUpRetry = false): Promise<T> {
   const response = await fetch(path, {
     method,
     credentials: 'include',
@@ -101,10 +101,25 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     if (response.status === 403 && data && data.code === 'email_unverified') {
       showVerifyModal()
     }
+    // Sensitive actions need a fresh step-up. Open the dialog; once the user re-confirms with their
+    // password, the promise resolves and we retry the original call transparently. (The Google path
+    // navigates away and the user redoes the action on return.) We retry at most once.
+    if (response.status === 403 && data && data.code === 'step_up_required' && !isStepUpRetry) {
+      await requestStepUp()
+      return request<T>(method, path, body, true)
+    }
     const message = data && typeof data.error === 'string' ? data.error : `Request failed (${response.status})`
     throw new Error(message)
   }
   return data as T
+}
+
+export interface StepUpStatus {
+  fresh: boolean
+  window_seconds: number
+  password_method: boolean
+  google_method: boolean
+  expires_at?: string
 }
 
 export const api = {
@@ -122,6 +137,10 @@ export const api = {
     request<{ message: string }>('POST', '/auth/password/reset', { token, new_password: newPassword }),
   verifyEmail: (token: string) => request<{ message: string }>('POST', '/auth/email/verify', { token }),
   resendVerification: () => request<{ message: string }>('POST', '/auth/email/resend'),
+
+  stepUpStatus: () => request<StepUpStatus>('GET', '/auth/step-up'),
+  stepUpPassword: (password: string) =>
+    request<{ message: string; expires_at: string }>('POST', '/auth/step-up/password', { password }),
 
   updateProfile: (displayName: string) =>
     request<User>('PUT', '/api/v1/account/profile', { display_name: displayName }),

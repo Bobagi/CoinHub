@@ -19,6 +19,7 @@ var (
 	ErrAccountDisabled       = errors.New("this account is disabled")
 	ErrIncorrectPassword     = errors.New("current password is incorrect")
 	ErrGoogleEmailUnverified = errors.New("your Google account email is not verified")
+	ErrPasswordNotSet        = errors.New("this account has no password set")
 )
 
 // bcrypt silently truncates passwords beyond 72 bytes, so we reject them explicitly.
@@ -143,6 +144,23 @@ func (service *AuthService) AuthenticateWithGoogle(authenticationContext context
 		log.Printf("Could not seed default trading settings for user %d: %v", createdUser.Identifier, defaultsError)
 	}
 	return createdUser, nil
+}
+
+// VerifyStepUpPassword checks a password against an existing account (looked up by id), for step-up
+// re-authentication. Returns ErrPasswordNotSet for passwordless (Google-only) accounts and
+// ErrIncorrectPassword on a mismatch.
+func (service *AuthService) VerifyStepUpPassword(verificationContext context.Context, userIdentifier int64, password string) error {
+	existingUser, lookupError := service.userRepository.FindByIdentifier(verificationContext, userIdentifier)
+	if lookupError != nil {
+		return lookupError
+	}
+	if !existingUser.HasPassword() {
+		return ErrPasswordNotSet
+	}
+	if !service.passwordService.VerifyPassword(existingUser.PasswordHash, password) {
+		return ErrIncorrectPassword
+	}
+	return nil
 }
 
 // UpdateDisplayName changes the account's display name.

@@ -13,4 +13,6 @@ type UserSession struct {
 	LastSeenAt       time.Time
 	UserAgent        string
 	IPAddress        string
+	// StepUpVerifiedAt is when this session most recently re-proved identity (step-up). nil = never.
+	StepUpVerifiedAt *time.Time
 }

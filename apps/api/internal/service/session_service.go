@@ -77,6 +77,48 @@ func (service *SessionService) RevokeSession(revokeContext context.Context, rawT
 	return service.sessionRepository.DeleteByTokenHash(revokeContext, hashSessionToken(rawToken))
 }
 
+// MarkStepUpByToken records a fresh step-up ("sudo") verification on the single session backing a
+// raw token. Used by the password step-up flow, where the caller's own session cookie is present.
+func (service *SessionService) MarkStepUpByToken(operationContext context.Context, rawToken string) error {
+	if rawToken == "" {
+		return ErrSessionNotFound
+	}
+	return service.sessionRepository.MarkStepUpByTokenHash(operationContext, hashSessionToken(rawToken))
+}
+
+// MarkStepUpForUser records a fresh step-up on all of a user's active sessions. Used by the Google
+// re-confirm flow, where the original session cookie is not returned through the cross-site redirect.
+func (service *SessionService) MarkStepUpForUser(operationContext context.Context, userIdentifier int64) error {
+	return service.sessionRepository.MarkStepUpForUser(operationContext, userIdentifier)
+}
+
+// StepUpExpiry returns when the step-up window for a raw token expires, given the window length, and
+// whether it is currently fresh. A zero expiry with false means never verified (or unknown session).
+func (service *SessionService) StepUpExpiry(operationContext context.Context, rawToken string, window time.Duration) (time.Time, bool, error) {
+	if rawToken == "" {
+		return time.Time{}, false, ErrSessionNotFound
+	}
+	session, lookupError := service.sessionRepository.FindActiveByTokenHash(operationContext, hashSessionToken(rawToken))
+	if lookupError != nil {
+		return time.Time{}, false, lookupError
+	}
+	if session == nil {
+		return time.Time{}, false, ErrSessionNotFound
+	}
+	if session.StepUpVerifiedAt == nil {
+		return time.Time{}, false, nil
+	}
+	expiresAt := session.StepUpVerifiedAt.Add(window)
+	return expiresAt, time.Now().Before(expiresAt), nil
+}
+
+// IsStepUpFresh reports whether the session behind a raw token has re-proved identity within the
+// window.
+func (service *SessionService) IsStepUpFresh(operationContext context.Context, rawToken string, window time.Duration) (bool, error) {
+	_, fresh, lookupError := service.StepUpExpiry(operationContext, rawToken, window)
+	return fresh, lookupError
+}
+
 // StartExpiredSessionCleanup runs a background loop that periodically deletes sessions past their
 // expiry, so the user_sessions table does not grow without bound. It returns immediately; the loop
 // stops when the supplied context is cancelled.

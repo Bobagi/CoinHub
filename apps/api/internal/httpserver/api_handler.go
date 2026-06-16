@@ -103,6 +103,18 @@ func (handler *APIHandler) handleSettings(responseWriter http.ResponseWriter, re
 		operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
 		defer cancel()
 		environmentName := handler.credentialService.ActiveEnvironmentName(operationContext, userIdentifier)
+
+		// Turning live (real-money) trading ON is a high-risk transition: require a fresh step-up. We
+		// only gate the off->on edge so routine saves while it is already on are not interrupted.
+		if payload.LiveTradingEnabled {
+			currentSettings, _ := handler.tradingSettingsRepository.GetByUserAndEnvironment(operationContext, userIdentifier, environmentName)
+			if currentSettings == nil || !currentSettings.LiveTradingEnabled {
+				if !enforceStepUp(operationContext, responseWriter, handler.sessionService, request, handler.cookieName) {
+					return
+				}
+			}
+		}
+
 		updatedSettings := domain.UserTradingSettings{
 			UserIdentifier:               userIdentifier,
 			TradingPairSymbol:            normalizeSymbolOrDefault(payload.TradingPairSymbol),
@@ -176,6 +188,10 @@ func (handler *APIHandler) handleCredentials(responseWriter http.ResponseWriter,
 		operationContext, cancel := context.WithTimeout(request.Context(), 12*time.Second)
 		defer cancel()
 		if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+			return
+		}
+		// Connecting the account that holds the funds is a high-risk action: require a fresh step-up.
+		if !enforceStepUp(operationContext, responseWriter, handler.sessionService, request, handler.cookieName) {
 			return
 		}
 		saveError := handler.credentialService.SaveAndValidate(operationContext, userIdentifier, payload.APIKey, payload.APISecret, payload.Environment)

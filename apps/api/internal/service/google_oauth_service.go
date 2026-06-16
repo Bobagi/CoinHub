@@ -58,6 +58,17 @@ func NewGoogleOAuthService(clientID string, clientSecret string, redirectURL str
 // AuthorizationURL builds the Google consent-screen URL the browser is redirected to. The opaque
 // state is echoed back to the callback for CSRF protection.
 func (service *GoogleOAuthService) AuthorizationURL(state string) string {
+	return service.authorizationURL(state, "select_account")
+}
+
+// ReauthorizationURL is like AuthorizationURL but forces Google to re-authenticate the user
+// (prompt=login), even if they already have an active Google session. Used for step-up so a
+// passwordless (Google-only) account can re-prove identity before a sensitive action.
+func (service *GoogleOAuthService) ReauthorizationURL(state string) string {
+	return service.authorizationURL(state, "login")
+}
+
+func (service *GoogleOAuthService) authorizationURL(state string, prompt string) string {
 	query := url.Values{}
 	query.Set("client_id", service.clientID)
 	query.Set("redirect_uri", service.redirectURL)
@@ -65,7 +76,7 @@ func (service *GoogleOAuthService) AuthorizationURL(state string) string {
 	query.Set("scope", "openid email profile")
 	query.Set("state", state)
 	query.Set("access_type", "online")
-	query.Set("prompt", "select_account")
+	query.Set("prompt", prompt)
 	return googleAuthorizationEndpoint + "?" + query.Encode()
 }
 

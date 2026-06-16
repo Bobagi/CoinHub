@@ -14,6 +14,12 @@ type UserSessionRepository interface {
 	DeleteByTokenHash(deletionContext context.Context, sessionTokenHash string) error
 	DeleteAllForUser(deletionContext context.Context, userIdentifier int64) error
 	DeleteExpiredSessions(deletionContext context.Context) (int64, error)
+	// MarkStepUpByTokenHash records a fresh step-up on a single session (the password flow, where the
+	// caller's session cookie is available).
+	MarkStepUpByTokenHash(operationContext context.Context, sessionTokenHash string) error
+	// MarkStepUpForUser records a fresh step-up on every session of a user (the Google re-confirm
+	// flow, where the original session cookie is not returned through the cross-site redirect).
+	MarkStepUpForUser(operationContext context.Context, userIdentifier int64) error
 }
 
 type PostgresUserSessionRepository struct {
@@ -43,7 +49,7 @@ func (repository *PostgresUserSessionRepository) FindActiveByTokenHash(lookupCon
 	row := repository.Database.QueryRowContext(
 		lookupContext,
 		`SELECT id, user_id, session_token_hash, expires_at, created_at, last_seen_at,
-		        COALESCE(user_agent, ''), COALESCE(ip_address, '')
+		        COALESCE(user_agent, ''), COALESCE(ip_address, ''), step_up_verified_at
 		 FROM user_sessions
 		 WHERE session_token_hash = $1 AND expires_at > NOW()`,
 		sessionTokenHash,
@@ -59,6 +65,7 @@ func (repository *PostgresUserSessionRepository) FindActiveByTokenHash(lookupCon
 		&session.LastSeenAt,
 		&session.UserAgent,
 		&session.IPAddress,
+		&session.StepUpVerifiedAt,
 	)
 	if errors.Is(scanError, sql.ErrNoRows) {
 		return nil, nil
@@ -83,6 +90,24 @@ func (repository *PostgresUserSessionRepository) DeleteAllForUser(deletionContex
 	_, executionError := repository.Database.ExecContext(
 		deletionContext,
 		`DELETE FROM user_sessions WHERE user_id = $1`,
+		userIdentifier,
+	)
+	return executionError
+}
+
+func (repository *PostgresUserSessionRepository) MarkStepUpByTokenHash(operationContext context.Context, sessionTokenHash string) error {
+	_, executionError := repository.Database.ExecContext(
+		operationContext,
+		`UPDATE user_sessions SET step_up_verified_at = NOW() WHERE session_token_hash = $1`,
+		sessionTokenHash,
+	)
+	return executionError
+}
+
+func (repository *PostgresUserSessionRepository) MarkStepUpForUser(operationContext context.Context, userIdentifier int64) error {
+	_, executionError := repository.Database.ExecContext(
+		operationContext,
+		`UPDATE user_sessions SET step_up_verified_at = NOW() WHERE user_id = $1 AND expires_at > NOW()`,
 		userIdentifier,
 	)
 	return executionError

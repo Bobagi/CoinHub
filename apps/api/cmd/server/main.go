@@ -66,7 +66,7 @@ func main() {
 	}
 	emailSender := email.NewSenderFromEnv()
 	accountEmailService := service.NewAccountEmailService(userRepository, authTokenRepository, userSessionRepository, passwordService, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
-	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, secureSessionCookies)
+	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, secretCipher, secureSessionCookies)
 	accountHandler := httpserver.NewAccountHandler(authService, sessionService, authHandler.CookieName, secureSessionCookies)
 
 	// Per-user trading configuration and Binance credentials.
