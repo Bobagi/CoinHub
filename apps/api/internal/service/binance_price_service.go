@@ -8,6 +8,7 @@ import (
         "net/http"
         "net/url"
         "strconv"
+        "sync"
         "time"
 
         "coin-alert/internal/domain"
@@ -18,6 +19,40 @@ type BinancePriceService struct {
         HTTPClient               *http.Client
 }
 
+// Spot prices are public market data and identical for every user, so a process-wide cache lets all
+// users (and the SPA) share a single fetch per symbol within a short window instead of each re-fetching
+// the same price. This is the biggest lever against the per-IP Binance weight limit: e.g. 50 users
+// holding BTC = one ticker call per window, not fifty. The TTL is well under the 30s monitor tick, so
+// each tick still sees a fresh price; it only collapses the duplicates within a tick. The cache key
+// includes the environment's base URL because TESTNET and PRODUCTION quote different prices.
+const sharedPriceCacheTTL = 5 * time.Second
+
+type cachedPriceEntry struct {
+        price     float64
+        expiresAt time.Time
+}
+
+var (
+        sharedPriceCacheMutex sync.Mutex
+        sharedPriceCache      = make(map[string]cachedPriceEntry)
+)
+
+func lookupCachedPrice(cacheKey string) (float64, bool) {
+        sharedPriceCacheMutex.Lock()
+        defer sharedPriceCacheMutex.Unlock()
+        entry, present := sharedPriceCache[cacheKey]
+        if !present || time.Now().After(entry.expiresAt) {
+                return 0, false
+        }
+        return entry.price, true
+}
+
+func storeCachedPrice(cacheKey string, price float64) {
+        sharedPriceCacheMutex.Lock()
+        defer sharedPriceCacheMutex.Unlock()
+        sharedPriceCache[cacheKey] = cachedPriceEntry{price: price, expiresAt: time.Now().Add(sharedPriceCacheTTL)}
+}
+
 type binanceTickerPriceResponse struct {
         Symbol string `json:"symbol"`
         Price  string `json:"price"`
@@ -26,7 +61,7 @@ type binanceTickerPriceResponse struct {
 func NewBinancePriceService(environmentConfiguration domain.BinanceEnvironmentConfiguration) *BinancePriceService {
         return &BinancePriceService{
                 EnvironmentConfiguration: environmentConfiguration,
-                HTTPClient:               &http.Client{Timeout: 8 * time.Second},
+                HTTPClient:               newBinanceHTTPClient(8 * time.Second),
         }
 }
 
@@ -35,6 +70,11 @@ func (service *BinancePriceService) UpdateEnvironmentConfiguration(newConfigurat
 }
 
 func (service *BinancePriceService) GetCurrentPrice(requestContext context.Context, tradingPairSymbol string) (float64, error) {
+        cacheKey := service.EnvironmentConfiguration.RESTBaseURL + "|" + tradingPairSymbol
+        if cachedPrice, present := lookupCachedPrice(cacheKey); present {
+                return cachedPrice, nil
+        }
+
         tickerEndpoint, urlBuildError := url.Parse(service.EnvironmentConfiguration.RESTBaseURL)
         if urlBuildError != nil {
                 return 0, urlBuildError
@@ -75,6 +115,7 @@ func (service *BinancePriceService) GetCurrentPrice(requestContext context.Conte
                 return 0, priceParseError
         }
 
+        storeCachedPrice(cacheKey, parsedPrice)
         return parsedPrice, nil
 }
 

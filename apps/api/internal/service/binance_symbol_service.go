@@ -37,7 +37,7 @@ type binanceExchangeInfoResponse struct {
 func NewBinanceSymbolService(environmentConfiguration domain.BinanceEnvironmentConfiguration) *BinanceSymbolService {
         return &BinanceSymbolService{
                 EnvironmentConfiguration: environmentConfiguration,
-                HTTPClient:               &http.Client{Timeout: 8 * time.Second},
+                HTTPClient:               newBinanceHTTPClient(8 * time.Second),
         }
 }
 

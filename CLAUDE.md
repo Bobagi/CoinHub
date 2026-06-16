@@ -165,5 +165,22 @@ project at `/opt/investidor10` left on disk + the vhost kept in `sites-available
   `ProfitabilityPanel` chart: the selected coin's price line vs a dashed **average-buy-price** line, an
   "if you sell everything now" unrealized P/L header, and per-coin P/L pills (green/red).
 
+### Binance IP rate limit (multi-user scaling)
+Binance enforces request weight **per IP**, not per key, and all users' traffic egresses from this one
+VPS — so the IP weight ceiling (~6000/min spot) is the first wall as the user base grows. Mitigations:
+- **Done:** a **shared process-wide price cache** (`binance_price_service.go`, 5s TTL keyed by env+symbol)
+  so N users holding the same coin = 1 ticker call per window, not N; and a **shared rate-limit gate**
+  (`binance_rate_limiter.go`): every Binance REST client is built with `newBinanceHTTPClient`, whose
+  `RoundTripper` reads `X-MBX-USED-WEIGHT-1M` (logs a warning past ~80%) and, on **429/418**, parks ALL
+  Binance requests until `Retry-After` — backing off as one IP.
+- **TODO (bigger, architectural — do these to actually scale):**
+  - **WebSocket user data stream** (per-user `listenKey`, 30-min keepalive): have Binance *push* order
+    fills/cancellations instead of the worker polling `GetOrderStatus` every 30s. This removes the bulk of
+    the REST weight (the take-profit is already a resting limit order, so polling only exists to reconcile).
+  - **WebSocket market price stream** (one combined ticker stream for all symbols) to replace REST ticker
+    polling that feeds stop-loss; pairs with the price cache above.
+  - Only after those: consider **multiple egress IPs / proxy sharding** (the limit is per IP) and a
+    **leader lock** before running >1 API replica (see worker single-process constraint).
+
 ## Don't print secrets
 `.env`, `/root/commands_band_share.txt`, and any API keys. Never echo/commit them.

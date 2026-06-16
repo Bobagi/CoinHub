@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { api } from './api'
   import { t } from './i18n'
+  import Pagination from './Pagination.svelte'
 
   type AssetTable = { table_name: string; header: string[]; rows: string[][]; error?: string }
 
@@ -15,6 +16,12 @@
   let busyDividends = false
   let assetsError = ''
   let dividendsError = ''
+
+  // Per-table pagination (default 10 rows/page). One page+size per asset table, plus the dividends table.
+  let assetPages: number[] = []
+  let assetSizes: number[] = []
+  let dividendsPage = 1
+  let dividendsPageSize = 10
 
   onMount(async () => {
     try {
@@ -44,6 +51,8 @@
     assetsError = ''
     try {
       assets = (await api.getPortfolioAssets()).tables || []
+      assetPages = assets.map(() => 1)
+      assetSizes = assets.map(() => 10)
     } catch (e) {
       assetsError = (e as Error).message
     } finally {
@@ -81,7 +90,7 @@
   {#if assetsError}<p class="error">{assetsError}</p>{/if}
   {#if dividendsError}<p class="error">{dividendsError}</p>{/if}
 
-  {#each assets as table}
+  {#each assets as table, tableIndex}
     <h3>{table.table_name}</h3>
     {#if table.error}
       <p class="error">{table.error}</p>
@@ -90,10 +99,11 @@
         {#if table.header && table.header.length}
           <div class="prow phead">{#each table.header as cell}<div>{cell}</div>{/each}</div>
         {/if}
-        {#each table.rows as row}
+        {#each table.rows.slice(((assetPages[tableIndex] || 1) - 1) * (assetSizes[tableIndex] || 10), (assetPages[tableIndex] || 1) * (assetSizes[tableIndex] || 10)) as row}
           <div class="prow">{#each row as cell}<div>{cell}</div>{/each}</div>
         {/each}
       </div>
+      <Pagination total={table.rows.length} bind:page={assetPages[tableIndex]} bind:pageSize={assetSizes[tableIndex]} />
     {/if}
   {/each}
 
@@ -101,10 +111,11 @@
     <h3>{$t('portfolio.upcoming')}</h3>
     <div class="ptable">
       <div class="prow phead"><div>{$t('portfolio.asset')}</div><div>{$t('portfolio.date')}</div></div>
-      {#each dividends as dividend}
+      {#each dividends.slice((dividendsPage - 1) * dividendsPageSize, dividendsPage * dividendsPageSize) as dividend}
         <div class="prow"><div>{dividend.asset}</div><div>{dividend.date_com}</div></div>
       {/each}
     </div>
+    <Pagination total={dividends.length} bind:page={dividendsPage} bind:pageSize={dividendsPageSize} />
   {/if}
 </section>
 

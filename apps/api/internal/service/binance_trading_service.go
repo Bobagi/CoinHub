@@ -65,7 +65,7 @@ type BinanceOrderStatus struct {
 func NewBinanceTradingService(environmentConfiguration domain.BinanceEnvironmentConfiguration) *BinanceTradingService {
 	return &BinanceTradingService{
 		EnvironmentConfiguration: environmentConfiguration,
-		HTTPClient:               &http.Client{Timeout: 10 * time.Second},
+		HTTPClient:               newBinanceHTTPClient(10 * time.Second),
 	}
 }
 

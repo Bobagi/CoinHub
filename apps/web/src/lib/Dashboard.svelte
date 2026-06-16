@@ -9,6 +9,7 @@
   import LegalFooter from './LegalFooter.svelte'
   import SymbolAutocomplete from './SymbolAutocomplete.svelte'
   import LockOverlay from './LockOverlay.svelte'
+  import Pagination from './Pagination.svelte'
 
   let activeTab: 'connection' | 'trade' | 'b3' = 'trade'
   let opsView: 'positions' | 'history' = 'positions'
@@ -321,6 +322,14 @@
   $: belowMinimum = !!tradeFilters && tradeFilters.min_notional > 0 && tradeAmount < tradeFilters.min_notional
   // CANCELED operations (take-profit removed externally) are dropped from the positions view.
   $: visiblePositions = operations.filter((operation) => operation.status !== 'CANCELED')
+
+  // Paginate the (potentially ever-growing) positions and history tables; default 10 rows per page.
+  let positionsPage = 1
+  let positionsPageSize = 10
+  let historyPage = 1
+  let historyPageSize = 10
+  $: pagedPositions = visiblePositions.slice((positionsPage - 1) * positionsPageSize, positionsPage * positionsPageSize)
+  $: pagedExecutions = executions.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize)
 
   async function buy() {
     tradeBusy = true
@@ -848,7 +857,7 @@
               <div>{$t('ops.purchased')}</div>
               <div class="col-actions">{$t('ops.actions')}</div>
             </div>
-            {#each visiblePositions as operation (operation.id)}
+            {#each pagedPositions as operation (operation.id)}
               <div class="trow">
                 <div>{operation.symbol}</div>
                 <div><span class="badge {operation.status === 'SOLD' ? 'green' : 'amber'}">{operation.status}</span></div>
@@ -888,6 +897,7 @@
               </div>
             {/each}
           </div>
+          <Pagination total={visiblePositions.length} bind:page={positionsPage} bind:pageSize={positionsPageSize} />
         {/if}
       {:else}
         {#if executions.length === 0}
@@ -904,7 +914,7 @@
               <div>{$t('hist.total')}</div>
               <div class="col-actions">{$t('hist.result')}</div>
             </div>
-            {#each executions as execution (execution.id)}
+            {#each pagedExecutions as execution (execution.id)}
               <div class="hrow">
                 <div class="muted">{$formatDateTime(execution.executed_at)}</div>
                 <div><span class="badge {execution.operation_type === 'SELL' ? 'green' : execution.operation_type === 'SELL_ORDER_PLACED' ? 'blue' : execution.operation_type.startsWith('SELL_') ? 'red' : 'amber'}">{$t('hist.act.' + execution.operation_type)}</span></div>
@@ -923,6 +933,7 @@
               </div>
             {/each}
           </div>
+          <Pagination total={executions.length} bind:page={historyPage} bind:pageSize={historyPageSize} />
         {/if}
       {/if}
     </section>

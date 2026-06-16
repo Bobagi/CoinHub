@@ -21,7 +21,7 @@ type BinanceCredentialValidator struct {
 }
 
 func NewBinanceCredentialValidator(apiBaseURL string) *BinanceCredentialValidator {
-        return &BinanceCredentialValidator{APIBaseURL: apiBaseURL, HTTPClient: &http.Client{Timeout: 8 * time.Second}}
+        return &BinanceCredentialValidator{APIBaseURL: apiBaseURL, HTTPClient: newBinanceHTTPClient(8 * time.Second)}
 }
 
 func (validator *BinanceCredentialValidator) UpdateAPIBaseURL(newBaseURL string) {
