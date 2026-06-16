@@ -131,6 +131,13 @@ func (service *UserCredentialService) ActiveEnvironmentName(operationContext con
 	return domain.BinanceEnvironmentTestnet
 }
 
+// DeleteCredentials removes the user's stored Binance keys for an environment from the database and
+// returns how many credential rows were deleted (0 = nothing was stored for that environment).
+func (service *UserCredentialService) DeleteCredentials(operationContext context.Context, userIdentifier int64, environmentName string) (int64, error) {
+	normalizedEnvironment := domain.NormalizeBinanceEnvironment(environmentName)
+	return service.repository.DeleteCredentialsForUserByEnvironment(operationContext, userIdentifier, normalizedEnvironment)
+}
+
 // GetStatus returns a non-sensitive summary suitable for the dashboard.
 func (service *UserCredentialService) GetStatus(operationContext context.Context, userIdentifier int64) (CredentialStatus, error) {
 	configuredEnvironments, listError := service.repository.ListConfiguredEnvironmentsForUser(operationContext, userIdentifier)

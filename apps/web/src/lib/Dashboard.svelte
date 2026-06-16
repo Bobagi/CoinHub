@@ -39,6 +39,9 @@
   let credMsg = ''
   let credErr = ''
   let credBusy = false
+  // Removing stored keys: two-step inline confirm.
+  let confirmingDelete = false
+  let credDeleteBusy = false
 
   let envBusy = ''
   let envMsg = ''
@@ -219,11 +222,33 @@
     }
   }
 
+  // Permanently delete the stored keys for the selected environment.
+  async function deleteCredentials() {
+    credDeleteBusy = true
+    credMsg = ''
+    credErr = ''
+    try {
+      await api.deleteCredentials(credEnv)
+      confirmingDelete = false
+      credMsg = $t('binance.deleted')
+      await loadAll()
+      await loadExecutions()
+      loadRobots()
+      selectedRobotId = null
+      creatingRobot = false
+    } catch (e) {
+      credErr = (e as Error).message
+    } finally {
+      credDeleteBusy = false
+    }
+  }
+
   // Selecting an environment targets it for the key form and, if it already has keys, activates it.
   async function selectEnvironment(environment: string) {
     credEnv = environment
     envMsg = ''
     envErr = ''
+    confirmingDelete = false
     if (!isConfigured(environment) || isActive(environment)) return
     envBusy = environment
     try {
@@ -541,6 +566,28 @@
       </button>
       {#if credMsg}<p class="success mt-3">{credMsg}</p>{/if}
       {#if credErr}<p class="error mt-3">{credErr}</p>{/if}
+
+      {#if isConfigured(credEnv)}
+        <div class="danger-zone mt-5">
+          {#if !confirmingDelete}
+            <button class="ghost danger btn-sm" disabled={credDeleteBusy} on:click={() => (confirmingDelete = true)}>
+              {$t('binance.deleteKeys')}
+            </button>
+            <span class="muted mt-2">{$t('binance.deleteKeysHint')}</span>
+          {:else}
+            <p class="mt-2">{$t('binance.deleteConfirm')}</p>
+            <span class="muted">{$t('binance.deleteKeysHint')}</span>
+            <div class="danger-actions mt-3">
+              <button class="danger btn-sm" disabled={credDeleteBusy} on:click={deleteCredentials}>
+                {credDeleteBusy ? $t('binance.deleting') : $t('binance.confirmDelete')}
+              </button>
+              <button class="ghost btn-sm" disabled={credDeleteBusy} on:click={() => (confirmingDelete = false)}>
+                {$t('binance.cancelDelete')}
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
     </section>
   {:else if activeTab === 'trade'}
     <div class="locked-wrap">
@@ -890,6 +937,8 @@
 </main>
 
 <style>
+  .danger-zone { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-4); border-top: 1px solid var(--border); }
+  .danger-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
   .start summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--space-2); }
   .start summary::-webkit-details-marker { display: none; }
   .start-caret { color: var(--brand); display: inline-block; transition: transform 0.15s ease; }

@@ -16,6 +16,7 @@ type UserBinanceCredentialRepository interface {
 	LoadLatestCredentialForUserByEnvironment(loadContext context.Context, userIdentifier int64, environmentName string) (*domain.BinanceCredentialRecord, error)
 	ActivateEnvironmentForUser(operationContext context.Context, userIdentifier int64, environmentName string) error
 	ListConfiguredEnvironmentsForUser(loadContext context.Context, userIdentifier int64) ([]string, error)
+	DeleteCredentialsForUserByEnvironment(operationContext context.Context, userIdentifier int64, environmentName string) (int64, error)
 }
 
 func (repository *PostgresBinanceCredentialRepository) SaveCredentialForUser(saveContext context.Context, userIdentifier int64, credential domain.BinanceCredentialRecord) error {
@@ -123,6 +124,21 @@ func (repository *PostgresBinanceCredentialRepository) ListConfiguredEnvironment
 		configuredEnvironments = append(configuredEnvironments, environmentName)
 	}
 	return configuredEnvironments, rows.Err()
+}
+
+// DeleteCredentialsForUserByEnvironment removes every stored credential a user has for an
+// environment and returns how many rows were deleted.
+func (repository *PostgresBinanceCredentialRepository) DeleteCredentialsForUserByEnvironment(operationContext context.Context, userIdentifier int64, environmentName string) (int64, error) {
+	result, executionError := repository.Database.ExecContext(
+		operationContext,
+		"DELETE FROM binance_credentials WHERE user_id = $1 AND environment = $2",
+		userIdentifier,
+		environmentName,
+	)
+	if executionError != nil {
+		return 0, executionError
+	}
+	return result.RowsAffected()
 }
 
 func scanCredentialRecord(row *sql.Row) (*domain.BinanceCredentialRecord, error) {

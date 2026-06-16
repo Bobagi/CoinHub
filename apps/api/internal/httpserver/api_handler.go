@@ -205,6 +205,24 @@ func (handler *APIHandler) handleCredentials(responseWriter http.ResponseWriter,
 		}
 		writeJSON(responseWriter, http.StatusOK, map[string]string{"message": "Credentials validated and saved."})
 
+	case http.MethodDelete:
+		operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+		defer cancel()
+		environment := strings.TrimSpace(request.URL.Query().Get("environment"))
+		if environment == "" {
+			environment = handler.credentialService.ActiveEnvironmentName(operationContext, userIdentifier)
+		}
+		deletedCount, deleteError := handler.credentialService.DeleteCredentials(operationContext, userIdentifier, environment)
+		if deleteError != nil {
+			writeJSONError(responseWriter, http.StatusInternalServerError, "Could not remove the stored keys.")
+			return
+		}
+		if deletedCount == 0 {
+			writeJSONError(responseWriter, http.StatusNotFound, "No stored keys for that environment.")
+			return
+		}
+		writeJSON(responseWriter, http.StatusOK, map[string]string{"message": "Stored keys removed."})
+
 	default:
 		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
 	}

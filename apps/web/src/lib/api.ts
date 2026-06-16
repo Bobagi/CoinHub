@@ -164,6 +164,8 @@ export const api = {
     }),
   activateEnvironment: (environment: string) =>
     request<{ message: string }>('POST', '/api/v1/binance/credentials/activate', { environment }),
+  deleteCredentials: (environment: string) =>
+    request<{ message: string }>('DELETE', `/api/v1/binance/credentials?environment=${encodeURIComponent(environment)}`),
 
   getPrice: (symbol: string) =>
     request<{ symbol: string; price: number }>('GET', `/api/v1/binance/price?symbol=${encodeURIComponent(symbol)}`),
