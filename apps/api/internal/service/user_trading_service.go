@@ -35,8 +35,16 @@ func NewUserTradingService(credentialService *UserCredentialService, settingsRep
 
 // ExecuteBuy places a market buy for the given quote amount and an immediate take-profit limit sell.
 // initiatedBy records whether a user or the bot triggered it. Real-money (PRODUCTION) orders are
-// refused unless the user explicitly enabled live trading.
+// refused unless the user explicitly enabled live trading. The buy is logged as a plain BUY; the daily
+// DCA path uses executeBuyWithType to log a single DAILY_BUY instead.
 func (service *UserTradingService) ExecuteBuy(operationContext context.Context, userIdentifier int64, initiatedBy string, tradingPairSymbol string, quoteAmount float64, targetProfitPercent float64, sellOrderValidityDaysOverride *int) (*domain.TradingOperation, error) {
+	return service.executeBuyWithType(operationContext, userIdentifier, initiatedBy, tradingPairSymbol, quoteAmount, targetProfitPercent, sellOrderValidityDaysOverride, domain.TradingOperationTypeBuy)
+}
+
+// executeBuyWithType is the shared buy implementation; buyExecutionType is the operation_type recorded
+// in history for the buy leg (BUY for manual buys, DAILY_BUY for the daily DCA), so a daily purchase
+// produces exactly one buy row instead of a BUY + DAILY_BUY pair.
+func (service *UserTradingService) executeBuyWithType(operationContext context.Context, userIdentifier int64, initiatedBy string, tradingPairSymbol string, quoteAmount float64, targetProfitPercent float64, sellOrderValidityDaysOverride *int, buyExecutionType string) (*domain.TradingOperation, error) {
 	tradingPairSymbol = strings.ToUpper(strings.TrimSpace(tradingPairSymbol))
 	if tradingPairSymbol == "" {
 		return nil, errors.New("a trading pair is required")
@@ -106,7 +114,7 @@ func (service *UserTradingService) ExecuteBuy(operationContext context.Context, 
 	}
 
 	buyOrderIdentifier := strconv.FormatInt(buyOrderResponse.OrderID, 10)
-	service.logExecution(operationContext, userIdentifier, environmentName, initiatedBy, tradingPairSymbol, domain.TradingOperationTypeBuy, purchasePricePerUnit, executedQuantity, purchasePricePerUnit*executedQuantity, true, nil, &buyOrderIdentifier)
+	service.logExecution(operationContext, userIdentifier, environmentName, initiatedBy, tradingPairSymbol, buyExecutionType, purchasePricePerUnit, executedQuantity, purchasePricePerUnit*executedQuantity, true, nil, &buyOrderIdentifier)
 
 	targetSellPricePerUnit := purchasePricePerUnit * (1 + (targetProfitPercent / 100))
 	if symbolFilters.TickSize > 0 {
@@ -144,15 +152,11 @@ func (service *UserTradingService) ExecuteBuy(operationContext context.Context, 
 	return &operation, nil
 }
 
-// ExecuteDailyPurchase performs the daily DCA buy (always bot-initiated) and records a DAILY_BUY
-// marker execution (used for the daily-buy history and to keep the daily purchase idempotent).
+// ExecuteDailyPurchase performs the daily DCA buy (always bot-initiated). The buy leg is logged once as
+// a single DAILY_BUY execution (used for the daily-buy history and to keep the daily purchase
+// idempotent), so it never leaves a duplicate plain BUY row alongside it.
 func (service *UserTradingService) ExecuteDailyPurchase(operationContext context.Context, userIdentifier int64, environment string, tradingPairSymbol string, quoteAmount float64, targetProfitPercent float64, sellOrderValidityDays int) (*domain.TradingOperation, error) {
-	operation, buyError := service.ExecuteBuy(operationContext, userIdentifier, domain.ExecutionInitiatorBot, tradingPairSymbol, quoteAmount, targetProfitPercent, &sellOrderValidityDays)
-	if buyError != nil {
-		return nil, buyError
-	}
-	service.logExecution(operationContext, userIdentifier, operation.BinanceEnvironment, domain.ExecutionInitiatorBot, operation.TradingPairSymbol, domain.TradingOperationTypeDailyBuy, operation.PurchasePricePerUnit, operation.QuantityPurchased, operation.PurchasePricePerUnit*operation.QuantityPurchased, true, nil, operation.BuyOrderIdentifier)
-	return operation, nil
+	return service.executeBuyWithType(operationContext, userIdentifier, domain.ExecutionInitiatorBot, tradingPairSymbol, quoteAmount, targetProfitPercent, &sellOrderValidityDays, domain.TradingOperationTypeDailyBuy)
 }
 
 // CloseOperationNow immediately closes an OPEN position at market on the user's request (user-initiated):

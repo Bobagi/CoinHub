@@ -138,7 +138,7 @@
   $: realizedCost = soldOperations.reduce((sum, op) => sum + op.quantity * op.purchase_price_per_unit, 0)
   $: realizedResult = realizedProceeds - realizedCost
   $: spentBySite = executions.filter((e) => e.success && e.operation_type === 'BUY' && e.initiated_by === 'USER').reduce((s, e) => s + e.total_value, 0)
-  $: spentByRobots = executions.filter((e) => e.success && e.operation_type === 'BUY' && e.initiated_by === 'BOT').reduce((s, e) => s + e.total_value, 0)
+  $: spentByRobots = executions.filter((e) => e.success && (e.operation_type === 'DAILY_BUY' || e.operation_type === 'BUY') && e.initiated_by === 'BOT').reduce((s, e) => s + e.total_value, 0)
   $: earnedBySite = executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'USER').reduce((s, e) => s + e.total_value, 0)
   $: earnedByRobots = executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'BOT').reduce((s, e) => s + e.total_value, 0)
   $: acquiredBySymbol = aggregateQuantity(operations)
@@ -843,6 +843,7 @@
               <div>{$t('ops.qty')}</div>
               <div>{$t('ops.buyPrice')}</div>
               <div>{$t('ops.target')}</div>
+              <div>{$t('ops.targetPct')}</div>
               <div>{$t('ops.sellOrder')}</div>
               <div>{$t('ops.purchased')}</div>
               <div class="col-actions">{$t('ops.actions')}</div>
@@ -854,6 +855,7 @@
                 <div>{fmt(operation.quantity)}</div>
                 <div>{fmt(operation.purchase_price_per_unit)}</div>
                 <div>{fmt(operation.sell_target_price_per_unit)}</div>
+                <div class="gold">+{fmt(operation.target_profit_percent)}%</div>
                 <div class="sell-cell">
                   {#if operation.sell_order_id}
                     <span class="badge green" title={$t('ops.gtcHelp')}>✓</span>
@@ -1022,7 +1024,8 @@
   .subtab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 
   .table { display: flex; flex-direction: column; overflow-x: auto; }
-  .trow { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr 1.3fr 1.4fr 140px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 900px; }
+  .trow { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.3fr 1.4fr 140px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 960px; }
+  .trow .gold { color: var(--brand); font-weight: 700; }
   .hrow { display: grid; grid-template-columns: 150px 0.9fr 0.8fr 0.9fr 1fr 0.9fr 1fr 70px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 760px; }
   .thead { color: var(--muted); font-weight: 700; font-size: var(--text-xs); }
   .col-actions { text-align: right; }
