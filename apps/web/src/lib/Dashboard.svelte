@@ -44,7 +44,6 @@
   let credDeleteBusy = false
 
   let envBusy = ''
-  let envMsg = ''
   let envErr = ''
 
   let settingsMsg = ''
@@ -249,7 +248,6 @@
   // "active but not connected"). The key form below always targets the selected environment.
   async function selectEnvironment(environment: string) {
     credEnv = environment
-    envMsg = ''
     envErr = ''
     confirmingDelete = false
     if (isActive(environment)) return
@@ -263,7 +261,6 @@
       selectedRobotId = null
       creatingRobot = false
       credEnv = environment
-      envMsg = $t('binance.activated')
     } catch (e) {
       envErr = (e as Error).message
     } finally {
@@ -550,7 +547,6 @@
         <span class="muted mt-2">{$t('binance.envHint')}</span>
         <span class="muted mt-2">{$t('binance.envIsolation')}</span>
       </div>
-      {#if envMsg}<p class="success mt-2">{envMsg}</p>{/if}
       {#if envErr}<p class="error mt-2">{envErr}</p>{/if}
 
       {#if isActive(credEnv) && credentials?.has_active_credential}
