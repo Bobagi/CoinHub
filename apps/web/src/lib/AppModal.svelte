@@ -52,9 +52,15 @@
   }
 
   function confirmWithGoogle() {
-    // Full-page redirect to Google (prompt=login). The user returns to /?step_up=ok and redoes the
-    // action; this page context is discarded, so there is nothing to resolve here.
-    window.location.href = '/auth/step-up/google/start'
+    // Open the Google re-confirm (prompt=login) in a POPUP, so this page — and the form the user
+    // already filled in — stays alive. When the popup finishes it postMessages the opener, which
+    // resolves the pending step-up and retries the original action transparently (nothing to re-type,
+    // and the API secret never touches storage). If the popup is blocked we fall back to a full-page
+    // redirect (the user then redoes the action on return).
+    const popup = window.open('/auth/step-up/google/start', 'coinhub-stepup', 'width=480,height=680')
+    if (!popup) {
+      window.location.href = '/auth/step-up/google/start'
+    }
   }
 
   async function resend() {

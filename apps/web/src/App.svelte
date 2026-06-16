@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { get } from 'svelte/store'
-  import { currentUser, route, showModalMessage } from './lib/stores'
+  import { currentUser, route, showModalMessage, completeStepUp, cancelStepUp } from './lib/stores'
   import { api } from './lib/api'
   import { t } from './lib/i18n'
   import Login from './lib/Login.svelte'
@@ -16,8 +16,10 @@
   let loading = true
   let emailEnabled = false
 
-  // The Google step-up flow bounces back here with ?step_up=ok|error|unavailable. Show a notice and
-  // strip the param so a refresh does not repeat it.
+  // The Google step-up flow bounces back with ?step_up=ok|error|unavailable. Normally we are the
+  // popup opened by the step-up modal: report the result to the opener (which retries the original
+  // action) and close. If we are NOT a popup (popup was blocked → full-page redirect), fall back to
+  // just showing a notice.
   function handleStepUpReturn() {
     if (typeof location === 'undefined') return
     const params = new URLSearchParams(location.search)
@@ -26,14 +28,41 @@
     params.delete('step_up')
     const remaining = params.toString()
     history.replaceState(null, '', location.pathname + (remaining ? '?' + remaining : '') + location.hash)
+
+    if (window.opener && window.opener !== window) {
+      try {
+        window.opener.postMessage({ type: 'coinhub-stepup', result }, location.origin)
+      } catch {
+        /* ignore */
+      }
+      window.close()
+      return
+    }
+
     const translate = get(t)
     if (result === 'ok') showModalMessage(translate('stepup.confirmedRetry'))
     else if (result === 'unavailable') showModalMessage(translate('stepup.unavailable'))
     else showModalMessage(translate('stepup.failed'))
   }
 
+  // In the opener window: receive the popup's result. 'ok' resolves the pending step-up so the
+  // original request is retried transparently; anything else cancels it and shows why.
+  function onStepUpMessage(event: MessageEvent) {
+    if (event.origin !== location.origin) return
+    const data = event.data
+    if (!data || data.type !== 'coinhub-stepup') return
+    if (data.result === 'ok') {
+      completeStepUp()
+    } else {
+      cancelStepUp()
+      const translate = get(t)
+      showModalMessage(translate(data.result === 'unavailable' ? 'stepup.unavailable' : 'stepup.failed'))
+    }
+  }
+
   onMount(async () => {
     handleStepUpReturn()
+    window.addEventListener('message', onStepUpMessage)
     try {
       emailEnabled = (await api.getAuthProviders()).email
     } catch {
@@ -46,6 +75,10 @@
     } finally {
       loading = false
     }
+  })
+
+  onDestroy(() => {
+    if (typeof window !== 'undefined') window.removeEventListener('message', onStepUpMessage)
   })
 </script>
 
