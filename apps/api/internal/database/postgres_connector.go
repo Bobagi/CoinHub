@@ -20,6 +20,13 @@ func InitializePostgresConnector(databaseURL string) (*PostgresConnector, error)
 		return nil, connectionError
 	}
 
+	// Bound the pool so concurrent HTTP handlers and the two background worker loops can never exhaust
+	// Postgres' max_connections (default 100). Idle connections are kept warm and recycled hourly.
+	databaseConnection.SetMaxOpenConns(25)
+	databaseConnection.SetMaxIdleConns(10)
+	databaseConnection.SetConnMaxLifetime(time.Hour)
+	databaseConnection.SetConnMaxIdleTime(10 * time.Minute)
+
 	pingContext, pingCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer pingCancel()
 

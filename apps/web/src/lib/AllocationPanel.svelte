@@ -244,7 +244,10 @@
     <div class="donut-col">
       <div class="donut-wrap"><canvas bind:this={donutCanvas}></canvas></div>
       <div class="wallet-total">
-        <div class="muted">{$t('alloc.walletTotal')}</div>
+        <div class="muted wt-label">
+          {$t('alloc.walletTotal')}
+          <span class="help-icon" title={$t('alloc.walletTotalHelp')} aria-label={$t('alloc.walletTotalHelp')} role="img">?</span>
+        </div>
         <div class="total-value">{formatMoney(total, mainQuote)}</div>
       </div>
       <div class="legend">
@@ -305,6 +308,13 @@
   .donut-wrap { position: relative; width: 100%; max-width: 220px; height: 200px; }
   .wallet-total { text-align: center; }
   .wallet-total .total-value { font-weight: 800; font-size: var(--text-lg); color: var(--brand); }
+  .wt-label { display: inline-flex; align-items: center; gap: var(--space-2); justify-content: center; }
+  .help-icon {
+    display: inline-grid; place-items: center; width: 16px; height: 16px;
+    border-radius: 50%; border: 1px solid var(--border-strong);
+    color: var(--muted); font-size: 0.7rem; font-weight: 800; cursor: help; line-height: 1;
+  }
+  .help-icon:hover { color: var(--brand); border-color: var(--brand); }
 
   .legend { width: 100%; display: flex; flex-direction: column; }
   .legend-row {

@@ -84,8 +84,23 @@ func (worker *AutomationWorker) monitorAllUsers(applicationContext context.Conte
 		return
 	}
 	for _, userIdentifier := range userIdentifiers {
-		worker.monitorUser(applicationContext, userIdentifier)
+		// Isolate each user: a panic while processing one user (e.g. an unexpected nil from Binance) is
+		// recovered so it never tears down the whole automation goroutine and stalls every other user.
+		runUserStepSafely(userIdentifier, "monitor", func() {
+			worker.monitorUser(applicationContext, userIdentifier)
+		})
 	}
+}
+
+// runUserStepSafely runs one user's automation step, recovering from any panic so a single user can
+// never crash the shared worker loop (an unrecovered panic in a goroutine terminates the process).
+func runUserStepSafely(userIdentifier int64, step string, run func()) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			log.Printf("automation: recovered from panic in %s for user %d: %v", step, userIdentifier, recovered)
+		}
+	}()
+	run()
 }
 
 func (worker *AutomationWorker) monitorUser(applicationContext context.Context, userIdentifier int64) {
@@ -292,30 +307,36 @@ func (worker *AutomationWorker) processDailyPurchases(applicationContext context
 	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
 
 	for _, userIdentifier := range userIdentifiers {
-		environmentConfiguration, _ := worker.credentialService.LoadActiveEnvironmentConfiguration(applicationContext, userIdentifier)
-		if environmentConfiguration == nil {
+		runUserStepSafely(userIdentifier, "daily purchase", func() {
+			worker.processDailyPurchasesForUser(applicationContext, userIdentifier, nowUTC, startOfDayUTC)
+		})
+	}
+}
+
+func (worker *AutomationWorker) processDailyPurchasesForUser(applicationContext context.Context, userIdentifier int64, nowUTC time.Time, startOfDayUTC time.Time) {
+	environmentConfiguration, _ := worker.credentialService.LoadActiveEnvironmentConfiguration(applicationContext, userIdentifier)
+	if environmentConfiguration == nil {
+		return
+	}
+	environmentName := environmentConfiguration.EnvironmentName
+
+	// Each robot runs its own daily DCA buy for its coin, independently and idempotently per day.
+	robots, _ := worker.robotRepository.ListRobotsForUser(applicationContext, userIdentifier, environmentName)
+	for _, robot := range robots {
+		if !robot.IsEnabled || !robot.DailyPurchaseEnabled || robot.CapitalThreshold <= 0 {
 			continue
 		}
-		environmentName := environmentConfiguration.EnvironmentName
+		if nowUTC.Hour() != robot.DailyPurchaseHourUTC {
+			continue
+		}
+		alreadyPurchased, _ := worker.purchaseGuard.HasSuccessfulExecutionOfTypeSince(applicationContext, userIdentifier, environmentName, domain.TradingOperationTypeDailyBuy, robot.TradingPairSymbol, startOfDayUTC)
+		if alreadyPurchased {
+			continue
+		}
 
-		// Each robot runs its own daily DCA buy for its coin, independently and idempotently per day.
-		robots, _ := worker.robotRepository.ListRobotsForUser(applicationContext, userIdentifier, environmentName)
-		for _, robot := range robots {
-			if !robot.IsEnabled || !robot.DailyPurchaseEnabled || robot.CapitalThreshold <= 0 {
-				continue
-			}
-			if nowUTC.Hour() != robot.DailyPurchaseHourUTC {
-				continue
-			}
-			alreadyPurchased, _ := worker.purchaseGuard.HasSuccessfulExecutionOfTypeSince(applicationContext, userIdentifier, environmentName, domain.TradingOperationTypeDailyBuy, robot.TradingPairSymbol, startOfDayUTC)
-			if alreadyPurchased {
-				continue
-			}
-
-			log.Printf("automation: running daily purchase for user %d robot %d (%s)", userIdentifier, robot.Identifier, robot.TradingPairSymbol)
-			if _, purchaseError := worker.tradingService.ExecuteDailyPurchase(applicationContext, userIdentifier, environmentName, robot.TradingPairSymbol, robot.CapitalThreshold, robot.TargetProfitPercent, robot.SellOrderValidityDays); purchaseError != nil {
-				log.Printf("automation: daily purchase failed for user %d robot %d: %v", userIdentifier, robot.Identifier, purchaseError)
-			}
+		log.Printf("automation: running daily purchase for user %d robot %d (%s)", userIdentifier, robot.Identifier, robot.TradingPairSymbol)
+		if _, purchaseError := worker.tradingService.ExecuteDailyPurchase(applicationContext, userIdentifier, environmentName, robot.TradingPairSymbol, robot.CapitalThreshold, robot.TargetProfitPercent, robot.SellOrderValidityDays); purchaseError != nil {
+			log.Printf("automation: daily purchase failed for user %d robot %d: %v", userIdentifier, robot.Identifier, purchaseError)
 		}
 	}
 }

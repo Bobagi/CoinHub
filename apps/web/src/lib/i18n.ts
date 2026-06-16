@@ -154,6 +154,8 @@ const en: Dictionary = {
   'prof.robots': 'Robots',
   'alloc.none': 'No open positions yet.',
   'alloc.walletTotal': 'Total wallet',
+  'alloc.walletTotalHelp':
+    'Current market value of your open positions (holdings × current price). It differs from “still invested” in the Profitability tab, which is what you paid (quantity × average buy price). The gap between them is your unrealized profit or loss.',
   'alloc.noHistory': 'No price history for this period.',
   'ops.title': 'Operations',
   'ops.none': 'No operations yet. Connect Binance and place your first buy.',
@@ -449,6 +451,8 @@ const pt: Dictionary = {
   'prof.robots': 'Robôs',
   'alloc.none': 'Nenhuma posição aberta ainda.',
   'alloc.walletTotal': 'Total da carteira',
+  'alloc.walletTotalHelp':
+    'Valor de mercado atual das suas posições abertas (quantidade × preço atual). É diferente do “ainda investido” na aba Rentabilidade, que é o quanto você pagou (quantidade × preço médio de compra). A diferença entre os dois é o seu lucro ou prejuízo não realizado.',
   'alloc.noHistory': 'Sem histórico de preço para este período.',
   'ops.title': 'Operações',
   'ops.none': 'Nenhuma operação ainda. Conecte a Binance e faça sua primeira compra.',
@@ -744,6 +748,8 @@ const es: Dictionary = {
   'prof.robots': 'Robots',
   'alloc.none': 'Aún no hay posiciones abiertas.',
   'alloc.walletTotal': 'Total de la cartera',
+  'alloc.walletTotalHelp':
+    'Valor de mercado actual de tus posiciones abiertas (cantidad × precio actual). Difiere del “aún invertido” en la pestaña Rentabilidad, que es lo que pagaste (cantidad × precio medio de compra). La diferencia entre ambos es tu ganancia o pérdida no realizada.',
   'alloc.noHistory': 'Sin historial de precio para este período.',
   'ops.title': 'Operaciones',
   'ops.none': 'Aún no hay operaciones. Conecta Binance y haz tu primera compra.',
