@@ -113,11 +113,8 @@ value + total + legend on the left; selected-coin header with period change badg
 price-history line chart, 24h/7d/1M/3M tabs and coin pills on the right — holdings × current price,
 history via `/binance/klines`), an **operations history sub-tab** (executions, for auditing — with a **By** column showing who acted,
 `initiated_by` USER/BOT, migration 0012; the take-profit is GTC/no-expiry, shown in the Sell-order column), a **non-custodial disclaimer/ToS** (`LegalFooter`),
-explanations, gold theme, favicon, i18n; portfolio scraper integration. Pending/optional: per-user email price alerts (table
-exists, route not rebuilt); more
-chart types (PnL/price/dividend calendar); WebSocket fills/price (today 30s polling; take-profit is
-already a resting limit order at exchange speed); remove the now-unwired legacy single-user *services*
-(`server.go` + `templates/` already deleted). The old standalone `investidor10` container (:3054) +
+explanations, gold theme, favicon, i18n; portfolio scraper integration. (Outstanding work is consolidated
+in the **TODO / backlog** section below.) The old standalone `investidor10` container (:3054) +
 its `investidor10.bobagi.space` vhost were **decommissioned** in the 2026-06 hardening pass (compose
 project at `/opt/investidor10` left on disk + the vhost kept in `sites-available`, so it is reversible).
 
@@ -181,6 +178,59 @@ VPS — so the IP weight ceiling (~6000/min spot) is the first wall as the user 
     polling that feeds stop-loss; pairs with the price cache above.
   - Only after those: consider **multiple egress IPs / proxy sharding** (the limit is per IP) and a
     **leader lock** before running >1 API replica (see worker single-process constraint).
+
+### 2026-06 session (history accuracy, multi-user hardening, pagination)
+- **Daily-buy history was double-logged**: the shared buy path always wrote a `BUY` row and the daily
+  DCA added a second `DAILY_BUY` row (same Binance order id), so bot buys showed as both "Compra" and
+  "Compra diária". Fixed: `executeBuyWithType` records the buy leg **once** — `BUY` for manual buys,
+  `DAILY_BUY` for the daily DCA. Migration **0022** removed the legacy duplicate `BUY` rows (a `BUY`
+  whose order_id+user+env matched an existing `DAILY_BUY`). The Profitability "spent by robots" split now
+  counts `DAILY_BUY` (+ legacy `BUY`).
+- **Positions sub-tab**: new **"Target profit"** column (`ops.targetPct`) showing each operation's
+  configured `target_profit_percent` next to the Target (price) column.
+- **Allocation total** has a **"?" help tooltip** (`alloc.walletTotalHelp`) explaining it is current
+  market value (holdings × price) vs the Profitability "still invested" (cost basis); the gap is
+  unrealized P/L — they are intentionally different, not a bug.
+- **Header**: the `TopNav` brand is a `<button>` and the global `button{display:inline-flex;gap}` rule
+  spaced "Coin"/"Hub"; set `gap:0` on `.brand` so it reads "CoinHub".
+- **AutomationWorker hardening**: per-user `recover()` in both the monitor and daily-purchase loops
+  (`runUserStepSafely`) — one user's panic can no longer crash the shared worker goroutine (an
+  unrecovered panic terminates the whole process). See the single-process constraint below.
+- **Postgres pool bounded** (`postgres_connector.go`): 25 open / 10 idle / 1h lifetime, so concurrent
+  HTTP handlers + the two worker loops can't exhaust `max_connections`.
+- **Pagination on every table**: reusable `Pagination.svelte` (page-size dropdown 10→50 default 10 +
+  prev/next + "X–Y of Z"; hidden when ≤10 rows). Wired to Positions, History, and the B3 assets +
+  dividends tables (they previously rendered every row forever). i18n `pager.*` (en/pt/es).
+
+### Worker concurrency model (IMPORTANT before scaling)
+The `AutomationWorker` runs **two goroutines** (monitor loop 30s, daily-purchase loop 5min) that iterate
+all active users **sequentially** inside a **single** API process (one compose replica). Per-user data is
+fully isolated (`WHERE user_id`, per-user encrypted keys/clients), so many users' robots run safely side
+by side. **But there is no leader election / advisory lock** — running >1 API replica would double-execute
+daily buys, stop-loss and reconciles. Daily-buy has partial cross-process protection (DAILY_BUY
+idempotency check in shared DB); stop-loss/reconcile do not. So: **do not scale to >1 replica without a
+leader lock first.** Other ceilings (fine at current scale): users processed serially (one slow user
+delays the rest, bounded by the 8–10s Binance HTTP timeouts); all Binance REST egresses from one IP, so
+the IP weight limit (above) bites first.
+
+## TODO / backlog (roughly prioritized)
+1. **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history (commit
+   `d891d08`); rotation still pending and history not purged. `CREDENTIALS_ENCRYPTION_KEY` must stay
+   stable (rotating it makes stored Binance secrets undecryptable — plan a re-encrypt migration if ever
+   rotated).
+2. **WebSocket user-data + market-price streams** — the real fix for the per-IP Binance rate limit
+   (replaces 30s `GetOrderStatus`/ticker polling). See the rate-limit section above.
+3. **Leader lock** (e.g. `pg_advisory_lock` or a leadership row) so the worker is safe to run on >1
+   replica; then optionally **multiple egress IPs / proxy sharding**.
+4. **2FA** (TOTP) — step-up ("sudo") re-auth for money actions is already shipped; full 2FA still
+   deferred.
+5. **Per-user email price alerts** — `email_alerts` table exists, the route/UI were not rebuilt after the
+   multi-user refactor.
+6. **More charts** — PnL over time, dividend calendar, etc.
+7. **Remove the now-unwired legacy single-user *services*** (`server.go` + `templates/` already deleted;
+   the old single-user services they used remain as dead code).
+8. **Robot monetization** — standard users are capped at 1 robot/environment
+   (`StandardUserRobotLimitPerEnvironment`), admins unlimited; the payment/billing piece is not built.
 
 ## Don't print secrets
 `.env`, `/root/commands_band_share.txt`, and any API keys. Never echo/commit them.
