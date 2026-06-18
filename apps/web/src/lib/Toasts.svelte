@@ -25,7 +25,8 @@
 <style>
   .toast-stack {
     position: fixed;
-    top: 1rem;
+    /* Sit just below the sticky TopNav (height published as --topbar-h), not over it. */
+    top: calc(var(--topbar-h, 1rem) + 0.5rem);
     right: 1rem;
     z-index: 1000;
     display: flex;

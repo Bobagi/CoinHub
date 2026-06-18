@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import { currentUser, binanceStatus, navigate } from './stores'
   import { api } from './api'
   import { t } from './i18n'
@@ -6,6 +7,14 @@
 
   let open = false
   let container: HTMLDivElement
+  let headerEl: HTMLElement
+
+  // Expose the sticky header's height as a CSS var so global fixed overlays (toasts) can sit below it
+  // instead of over it. Re-measured on resize; falls back to 1rem when the nav isn't mounted (login).
+  function updateTopbarHeight() {
+    if (headerEl) document.documentElement.style.setProperty('--topbar-h', `${headerEl.offsetHeight}px`)
+  }
+  onMount(updateTopbarHeight)
 
   $: displayName = $currentUser?.display_name?.trim() || $currentUser?.email || ''
 
@@ -34,9 +43,9 @@
   }
 </script>
 
-<svelte:window on:click={onWindowClick} on:keydown={onKeydown} />
+<svelte:window on:click={onWindowClick} on:keydown={onKeydown} on:resize={updateTopbarHeight} />
 
-<header class="topbar">
+<header class="topbar" bind:this={headerEl}>
   <button class="brand" type="button" on:click={() => navigate('dashboard')}>Coin<span>Hub</span></button>
   <div class="spacer"></div>
   {#if $binanceStatus}
