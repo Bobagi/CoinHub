@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from './api'
-  import { currentUser, navigate } from './stores'
+  import { currentUser, navigate, notifyError } from './stores'
   import { t, intlLocale } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
 
@@ -38,7 +38,7 @@
       currentUser.set(await api.updateProfile(name))
       profileMsg = $t('account.saved')
     } catch (error) {
-      profileErr = (error as Error).message
+      notifyError(error)
     } finally {
       profileBusy = false
     }
@@ -61,7 +61,7 @@
       // Refresh so a Google-only account flips to "has password" (change vs set).
       currentUser.set(await api.me())
     } catch (error) {
-      passwordErr = (error as Error).message
+      notifyError(error)
     } finally {
       passwordBusy = false
     }
@@ -75,7 +75,7 @@
       currentUser.set(null)
       navigate('dashboard')
     } catch (error) {
-      deleteErr = (error as Error).message
+      notifyError(error)
       deleteBusy = false
     }
   }

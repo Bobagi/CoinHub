@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { api } from './api'
   import { t } from './i18n'
+  import { notifyError } from './stores'
   import Pagination from './Pagination.svelte'
 
   type AssetTable = { table_name: string; header: string[]; rows: string[][]; error?: string }
@@ -40,7 +41,7 @@
       savedUrl = walletUrl.trim()
       sourceMessage = $t('portfolio.saved')
     } catch (e) {
-      sourceMessage = (e as Error).message
+      notifyError(e)
     } finally {
       saving = false
     }
@@ -54,7 +55,7 @@
       assetPages = assets.map(() => 1)
       assetSizes = assets.map(() => 10)
     } catch (e) {
-      assetsError = (e as Error).message
+      notifyError(e)
     } finally {
       busyAssets = false
     }
@@ -66,7 +67,7 @@
     try {
       dividends = (await api.getPortfolioDividends()).results || []
     } catch (e) {
-      dividendsError = (e as Error).message
+      notifyError(e)
     } finally {
       busyDividends = false
     }

@@ -233,9 +233,16 @@ the IP weight limit (above) bites first.
 ### 2026-06 session (toast notifications + translated trade errors)
 - **Toast notifications** ("popcorn"): a global self-dismissing toast stack — `Toasts.svelte` mounted
   once in `App.svelte`, driven by the `toasts` store + `pushToast`/`dismissToast` in `stores.ts`
-  (top-right, fly-in/fade-out, success/error/info variants, auto-dismiss ~4.5s / 7s for errors). Buy /
-  sell / (re)place-take-profit success **and** errors now surface as transient toasts instead of inline
-  text (the inline `tradeMsg`/`opsMsg`/`opsErr` were removed; `checkPrice`'s inline `tradeErr` stays).
+  (top-right, **below the sticky header** via the `--topbar-h` var `TopNav` publishes, fly-in/fade-out,
+  success/error/info, auto-dismiss ~4.5s / 7s for errors). **All in-app action errors** route through
+  **`notifyError(e)`** (`stores.ts`) → a localized toast (via `translateError`): the dashboard
+  (credentials, settings, robots, trade, env switch, initial load), the B3 portfolio panel, account
+  settings, and the verify-email banner. `notifyError` shows a gentle **info** toast when the user just
+  cancels a step-up re-auth (`toast.actionCancelled`) and swallows the internal "superseded" reject.
+  Buy/sell/place also toast their **success**. Kept **inline on purpose** (a transient toast on a
+  standalone page would vanish and leave a blank screen): the auth screens (Login / password-reset /
+  email-verify landing) and the step-up modal's own wrong-password error. **New catch blocks should
+  call `notifyError(e)`, not set inline error text.**
 - **Translated trade errors**: service-layer trade-validation errors are now `*service.UserFacingError`
   (`apps/api/internal/service/user_facing_error.go`) carrying a machine `code` + string `params`.
   Handlers forward them via `writeServiceError` (JSON `{error, code, params}`); the SPA throws `ApiError`

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { api } from './api'
   import { t } from './i18n'
+  import { notifyError } from './stores'
 
   let busy = false
   let message = ''
@@ -11,7 +12,7 @@
     try {
       message = (await api.resendVerification()).message
     } catch (e) {
-      message = (e as Error).message
+      notifyError(e)
     } finally {
       busy = false
     }

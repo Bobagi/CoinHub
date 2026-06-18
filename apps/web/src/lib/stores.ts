@@ -1,5 +1,6 @@
-import { writable } from 'svelte/store'
+import { writable, get } from 'svelte/store'
 import type { User } from './api'
+import { t, translateError } from './i18n'
 
 export const currentUser = writable<User | null>(null)
 
@@ -43,6 +44,22 @@ export function pushToast(text: string, kind: ToastKind = 'info', durationMs = k
     setTimeout(() => dismissToast(id), durationMs)
   }
   return id
+}
+
+// notifyError shows any caught error as a toast — the single place catch blocks should route errors
+// to, instead of inline text. It localizes via translateError (so coded backend errors are
+// translated), shows a gentle info toast when the user simply cancelled a step-up re-auth, and
+// silently ignores the internal "superseded" rejection.
+export function notifyError(error: unknown) {
+  const candidate = error as { code?: string; message?: string } | null
+  const message = candidate?.message ?? ''
+  if (candidate?.code === 'step_up_superseded' || message === 'step-up superseded') return
+  const translate = get(t)
+  if (candidate?.code === 'step_up_cancelled' || message === 'step-up cancelled') {
+    pushToast(translate('toast.actionCancelled'), 'info')
+    return
+  }
+  pushToast(translateError(translate, error), 'error')
 }
 
 // Step-up ("sudo") re-authentication. requestStepUp() opens the step-up modal and returns a promise

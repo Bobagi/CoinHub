@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { api, type TradingSettings, type CredentialStatus, type Operation, type Execution, type Robot } from './api'
-  import { binanceStatus, currentUser, pushToast } from './stores'
+  import { binanceStatus, currentUser, pushToast, notifyError } from './stores'
   import { t, intlLocale, formatDateTime, formatDate, translateError } from './i18n'
   import AllocationPanel from './AllocationPanel.svelte'
   import ProfitabilityPanel from './ProfitabilityPanel.svelte'
@@ -178,7 +178,7 @@
       tradeTarget = loadedSettings.target_profit_percent || 1.5
       if (loadedSettings.capital_threshold > 0) tradeAmount = loadedSettings.capital_threshold
     } catch (e) {
-      loadingError = (e as Error).message
+      notifyError(e)
     }
   }
 
@@ -215,7 +215,7 @@
       selectedRobotId = null
       creatingRobot = false
     } catch (e) {
-      credErr = (e as Error).message
+      notifyError(e)
     } finally {
       credBusy = false
     }
@@ -236,7 +236,7 @@
       selectedRobotId = null
       creatingRobot = false
     } catch (e) {
-      credErr = (e as Error).message
+      notifyError(e)
     } finally {
       credDeleteBusy = false
     }
@@ -260,7 +260,7 @@
       creatingRobot = false
       credEnv = environment
     } catch (e) {
-      envErr = (e as Error).message
+      notifyError(e)
     } finally {
       envBusy = ''
     }
@@ -276,7 +276,7 @@
       settings = await api.saveSettings(settings)
       settingsMsg = $t('settings.saved')
     } catch (e) {
-      settingsErr = (e as Error).message || $t('settings.savedError')
+      notifyError(e)
     } finally {
       settingsBusy = false
     }
@@ -294,7 +294,7 @@
       settings = await api.saveSettings(settings)
     } catch (e) {
       if (settings) settings.daily_purchase_enabled = previousValue
-      settingsErr = (e as Error).message
+      notifyError(e)
     } finally {
       botToggleBusy = false
     }
@@ -306,7 +306,7 @@
     try {
       tradePrice = (await api.getPrice(tradeSymbol)).price
     } catch (e) {
-      tradeErr = (e as Error).message
+      notifyError(e)
       tradePrice = null
     }
     try {
@@ -439,7 +439,7 @@
       selectRobot(robots.find((robot) => robot.id === created.id) || created)
       setRobotMessage($t('robots.created'))
     } catch (e) {
-      robotErr = (e as Error).message
+      notifyError(e)
     } finally {
       robotBusy = false
     }
@@ -458,7 +458,7 @@
       robotDraft = { ...updated }
       setRobotMessage($t('robots.saved'))
     } catch (e) {
-      robotErr = (e as Error).message
+      notifyError(e)
     } finally {
       robotBusy = false
     }
@@ -476,7 +476,7 @@
       await loadRobots()
       setRobotMessage($t('robots.deleted'))
     } catch (e) {
-      robotErr = (e as Error).message
+      notifyError(e)
     } finally {
       robotBusy = false
     }
