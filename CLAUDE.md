@@ -73,7 +73,7 @@ cd apps/web && pnpm build                        # rebuild the SPA nginx serves
   (all `restart: always`). API listens on **127.0.0.1:5020** only; nginx fronts it.
 - DB is **internal-only** (no host port). Volume `coin-hub_db_data`.
 - nginx vhost: `/etc/nginx/sites-available/coin.bobagi.space` (TLS via certbot) serves
-  `/opt/Coin-Alert/apps/web/dist` and proxies `/api`,`/auth`,`/health` → :5020. After edits:
+  `/opt/CoinHub/apps/web/dist` and proxies `/api`,`/auth`,`/health` → :5020. After edits:
   `nginx -t && systemctl reload nginx`.
 - **`CREDENTIALS_ENCRYPTION_KEY` must stay stable** — regenerating it makes stored Binance secrets
   undecryptable. Never print/commit `.env`.
