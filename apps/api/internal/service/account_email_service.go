@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/email"
-	"coin-alert/internal/repository"
+	"coin-hub/internal/email"
+	"coin-hub/internal/repository"
 )
 
 const passwordResetTokenTTL = time.Hour

@@ -10,13 +10,13 @@ import (
 	"syscall"
 	"time"
 
-	"coin-alert/internal/config"
-	"coin-alert/internal/database"
-	"coin-alert/internal/email"
-	"coin-alert/internal/httpserver"
-	"coin-alert/internal/repository"
-	"coin-alert/internal/security"
-	"coin-alert/internal/service"
+	"coin-hub/internal/config"
+	"coin-hub/internal/database"
+	"coin-hub/internal/email"
+	"coin-hub/internal/httpserver"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/security"
+	"coin-hub/internal/service"
 )
 
 func main() {

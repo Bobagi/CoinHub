@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
 )
 
 // UserTradingService orchestrates per-user trades: it loads the user's decrypted credentials,

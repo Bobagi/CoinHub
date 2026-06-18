@@ -7,7 +7,7 @@ truth so you don't have to re-derive the project each session.
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It
 merges two former projects into one repo:
-- **Crypto** (was `Bobagi/Coin-Alert`, Go): connect Binance, log/automate trades — market buy +
+- **Crypto** (Go): connect Binance, log/automate trades — market buy +
   take-profit limit sell, daily DCA, stop-loss, price alerts.
 - **B3 portfolio** (was `Bobagi/investidor10`, Python): read an Investidor10 public wallet to show
   stocks/FIIs and upcoming ex-dividend (data-com) dates.
@@ -18,7 +18,7 @@ text `#fff9db`) to match his other sites; UI is trilingual (pt-BR/en/es, auto-de
 ## Repo layout (monorepo)
 
 ```
-apps/api/      Go backend: trading engine + REST API + auth (the core). Module `coin-alert`.
+apps/api/      Go backend: trading engine + REST API + auth (the core). Module `coin-hub`.
 apps/web/      Svelte + Vite SPA (TypeScript). Builds to apps/web/dist (served by nginx).
 apps/scraper/  Python/Flask + Selenium scraper for Investidor10 (internal-only service).
 migrations/    golang-migrate SQL (0001..NNNN), applied by the compose `migrate` service.
@@ -60,6 +60,13 @@ hash is stored.
 - **Edit `.svelte` source lives in `apps/web/src/lib/`** — the repo-root `.gitignore` ignores `lib/`,
   so `apps/web/.gitignore` re-includes it (`!src/lib/`). Don't remove that or the UI source stops
   being committed.
+
+## Workflow — STANDING RULE (always, no exceptions)
+After **any** change, in the same session: (1) **deploy it** — `./deploy.sh <web|api|scraper|all>`
+for whatever you touched (`web` rebuilds the SPA nginx serves; `api` rebuilds + restarts the
+db/migrate/api containers; `scraper` the scraper); (2) **commit to `main` and push** —
+`git push origin main` with a real message. Never leave work undeployed or uncommitted, and never
+park changes on a side branch: this repo ships from `main`.
 
 ## Deploy (production, on the VPS)
 
@@ -212,6 +219,16 @@ idempotency check in shared DB); stop-loss/reconcile do not. So: **do not scale 
 leader lock first.** Other ceilings (fine at current scale): users processed serially (one slow user
 delays the rest, bounded by the 8–10s Binance HTTP timeouts); all Binance REST egresses from one IP, so
 the IP weight limit (above) bites first.
+
+### 2026-06 session (rename to CoinHub)
+- The on-disk deploy dir is **`/opt/CoinHub`** (renamed to match the repo `Bobagi/CoinHub`); nginx
+  `root` + both CLAUDE.md files updated. The compose project stays `coin-hub` and the DB volume
+  `coin-hub_db_data`, so no container/volume churn.
+- The **Go module is `coin-hub`** (`go.mod` + all imports + the Dockerfile binary `/bin/coin-hub`);
+  the legacy module/dir name was fully purged — no stale identifier remains anywhere in the project.
+  This repo's identity is **CoinHub** only.
+- Profitability wording: "spent/gasto/gastado" → **"cost/custo/costo"** ("gasto" read as wasteful;
+  "custo" is the correct cost-basis term, distinct from "still invested").
 
 ## TODO / backlog (roughly prioritized)
 1. **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history (commit

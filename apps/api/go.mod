@@ -1,4 +1,4 @@
-module coin-alert
+module coin-hub
 
 go 1.22
 

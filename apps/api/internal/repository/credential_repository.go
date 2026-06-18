@@ -4,7 +4,7 @@ import (
         "context"
         "database/sql"
 
-        "coin-alert/internal/domain"
+        "coin-hub/internal/domain"
 )
 
 type BinanceCredentialRepository interface {

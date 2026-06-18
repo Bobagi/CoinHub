@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 // UserTradingSettingsRepository persists bot/trading settings scoped to a single user AND a single

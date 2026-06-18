@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
-	"coin-alert/internal/service"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/service"
 )
 
 // RobotsHandler serves the per-user trading-robot endpoints. A robot is one automated bot for a

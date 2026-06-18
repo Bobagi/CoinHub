@@ -5,7 +5,7 @@ import (
         "log"
         "time"
 
-        "coin-alert/internal/domain"
+        "coin-hub/internal/domain"
 )
 
 type TradingAutomationService struct {

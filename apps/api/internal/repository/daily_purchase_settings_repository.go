@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 type DailyPurchaseSettingsRepository interface {

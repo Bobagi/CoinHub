@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 // SymbolFilters holds the Binance trading rules we must honor when placing limit orders. A limit

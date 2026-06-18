@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 type TradingOperationRepository interface {

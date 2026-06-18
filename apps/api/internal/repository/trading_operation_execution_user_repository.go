@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 const userExecutionColumns = `id, scheduled_operation_id, trading_pair_symbol, operation_type, unit_price,

@@ -13,10 +13,10 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
-	"coin-alert/internal/security"
-	"coin-alert/internal/service"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/security"
+	"coin-hub/internal/service"
 )
 
 // postLoginRedirectPath is where the browser lands after a successful Google sign-in.

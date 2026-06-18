@@ -8,7 +8,7 @@ import (
 
 	"github.com/lib/pq"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 // ErrUserNotFound is returned when no user matches the lookup.

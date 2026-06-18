@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"html"
 
-	"coin-alert/internal/email"
+	"coin-hub/internal/email"
 )
 
 // normalizeEmailLocale keeps the email language to one we have copy for, defaulting to pt-BR.

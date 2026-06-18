@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
-	"coin-alert/internal/service"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/service"
 )
 
 // OperationsHandler serves the user-scoped trading endpoints (operations, executions, open orders).

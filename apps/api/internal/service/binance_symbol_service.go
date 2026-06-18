@@ -8,7 +8,7 @@ import (
         "strings"
         "time"
 
-        "coin-alert/internal/domain"
+        "coin-hub/internal/domain"
 )
 
 type BinanceSymbolService struct {

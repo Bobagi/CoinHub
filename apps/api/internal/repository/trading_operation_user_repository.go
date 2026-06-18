@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 // ErrOperationNotFound is returned when no operation matches the id for the given user.

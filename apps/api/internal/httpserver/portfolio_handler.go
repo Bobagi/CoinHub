@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/repository"
-	"coin-alert/internal/service"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/service"
 )
 
 // PortfolioHandler serves the B3 portfolio endpoints, backed by the investidor10 scraper.

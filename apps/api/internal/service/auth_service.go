@@ -6,9 +6,9 @@ import (
 	"log"
 	"strings"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
-	"coin-alert/internal/security"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
+	"coin-hub/internal/security"
 )
 
 // Authentication errors surfaced to HTTP handlers.

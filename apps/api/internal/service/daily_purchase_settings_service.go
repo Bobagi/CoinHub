@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
 )
 
 type DailyPurchaseSettingsService struct {

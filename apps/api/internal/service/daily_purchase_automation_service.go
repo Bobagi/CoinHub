@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 type DailyPurchaseAutomationService struct {

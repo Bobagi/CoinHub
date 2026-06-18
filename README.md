@@ -9,8 +9,8 @@ previously separate projects into one multi-user application:
 - **B3 portfolio** — read an [Investidor10](https://investidor10.com.br) public wallet to
   show holdings, order history, and upcoming dividend (data-com) dates.
 
-> Replaces the old `Bobagi/Coin-Alert` (Go) and `Bobagi/investidor10` (Python) repos, which
-> are merged here.
+> Merges two previously separate projects — a Go crypto trading app and the Python
+> `Bobagi/investidor10` reader — into one repo.
 
 ## Architecture
 

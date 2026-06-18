@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 // ErrRobotNotFound is returned when no robot matches the id for the given user.

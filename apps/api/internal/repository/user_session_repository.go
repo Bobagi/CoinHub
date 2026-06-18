@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"coin-alert/internal/domain"
+	"coin-hub/internal/domain"
 )
 
 type UserSessionRepository interface {

@@ -11,7 +11,7 @@ import (
         "sync"
         "time"
 
-        "coin-alert/internal/domain"
+        "coin-hub/internal/domain"
 )
 
 type BinancePriceService struct {

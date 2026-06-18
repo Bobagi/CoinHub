@@ -5,8 +5,8 @@ import (
 	"errors"
 	"strings"
 
-	"coin-alert/internal/domain"
-	"coin-alert/internal/repository"
+	"coin-hub/internal/domain"
+	"coin-hub/internal/repository"
 )
 
 // ErrRobotLimitReached is returned when a non-admin tries to exceed their robot allowance.

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"coin-alert/internal/service"
+	"coin-hub/internal/service"
 )
 
 // AccountHandler serves the session-protected account-management endpoints: editing the profile,
