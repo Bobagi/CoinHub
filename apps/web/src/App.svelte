@@ -12,6 +12,7 @@
   import VerifyEmail from './lib/VerifyEmail.svelte'
   import VerifyBanner from './lib/VerifyBanner.svelte'
   import AppModal from './lib/AppModal.svelte'
+  import Toasts from './lib/Toasts.svelte'
 
   let loading = true
   let emailEnabled = false
@@ -105,6 +106,9 @@
 
 <!-- Global styled dialog (confirm-email / locked-screen notices), mounted once. -->
 <AppModal />
+
+<!-- Global "popcorn" toast notifications (transient success/error feedback), mounted once. -->
+<Toasts />
 
 <style>
   .center { display: grid; place-items: center; min-height: 100vh; }

@@ -137,8 +137,11 @@ func (service *BinanceTradingService) PlaceLimitSell(requestContext context.Cont
 
 	// A limit order's value must meet the symbol's NOTIONAL minimum, or Binance rejects it (-1013).
 	if filters.MinNotional > 0 && roundedPrice*roundedQuantity < filters.MinNotional {
-		return nil, fmt.Errorf("this position is too small for a sell order: its value %s is below Binance's minimum order value (NOTIONAL %s) for %s",
-			formatDecimal(roundedPrice*roundedQuantity), formatDecimal(filters.MinNotional), tradingPairSymbol)
+		orderValueText := formatDecimal(roundedPrice * roundedQuantity)
+		minNotionalText := formatDecimal(filters.MinNotional)
+		return nil, newUserError("sell_below_min_notional",
+			fmt.Sprintf("this position is too small for a sell order: its value %s is below Binance's minimum order value (NOTIONAL %s) for %s", orderValueText, minNotionalText, tradingPairSymbol),
+			map[string]string{"value": orderValueText, "minNotional": minNotionalText, "symbol": tradingPairSymbol})
 	}
 
 	requestParameters := url.Values{}

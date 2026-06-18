@@ -136,6 +136,17 @@ const en: Dictionary = {
   'alloc.tabAllocation': 'Allocation',
   'alloc.tabProfit': 'Profitability',
   'buy.spotHint': 'You pay in {quote} — keep enough {quote} in your Binance spot wallet, or the buy fails.',
+  'err.sell_below_min_notional': "This position is too small to sell: its value {value} is below Binance's minimum order value (NOTIONAL {minNotional}) for {symbol}.",
+  'err.buy_below_min_notional': 'The minimum order value for {symbol} is {minNotional} — you entered {entered}.',
+  'err.buy_exceeds_max': 'The buy amount exceeds the maximum allowed per order ({max}).',
+  'err.buy_amount_positive': 'The buy amount must be greater than zero.',
+  'err.trading_pair_required': 'Pick a trading pair first.',
+  'err.price_unavailable': 'The current price is unavailable for this pair.',
+  'err.invalid_executed_quantity': 'Binance returned an invalid executed quantity. Nothing was charged.',
+  'err.operation_already_closed': 'This position is already closed.',
+  'err.connect_binance_first': 'Connect a Binance account first.',
+  'err.enable_live_trading': 'Enable live trading in your settings before placing real-money orders.',
+  'err.wrong_environment': 'Switch to the {environment} environment to manage this position.',
   'prof.help': 'Cost = total paid on buys (you + robots). Received = money back from completed sales. Realized result = profit/loss on trades already closed; open positions are money still invested. Amounts are in each pair’s quote currency (the coin you pay with).',
   'prof.none': 'No trades yet. Buy something or let a robot run to see results here.',
   'prof.spent': 'Cost of buys',
@@ -437,6 +448,17 @@ const pt: Dictionary = {
   'alloc.tabAllocation': 'Alocação',
   'alloc.tabProfit': 'Rentabilidade',
   'buy.spotHint': 'Você paga em {quote} — tenha saldo de {quote} na sua carteira spot da Binance, senão a compra falha.',
+  'err.sell_below_min_notional': 'Esta posição é pequena demais para vender: o valor {value} está abaixo do valor mínimo de ordem da Binance (NOTIONAL {minNotional}) para {symbol}.',
+  'err.buy_below_min_notional': 'O valor mínimo de ordem para {symbol} é {minNotional} — você informou {entered}.',
+  'err.buy_exceeds_max': 'O valor da compra excede o máximo permitido por ordem ({max}).',
+  'err.buy_amount_positive': 'O valor da compra precisa ser maior que zero.',
+  'err.trading_pair_required': 'Escolha um par de negociação primeiro.',
+  'err.price_unavailable': 'O preço atual está indisponível para este par.',
+  'err.invalid_executed_quantity': 'A Binance retornou uma quantidade executada inválida. Nada foi cobrado.',
+  'err.operation_already_closed': 'Esta posição já está fechada.',
+  'err.connect_binance_first': 'Conecte uma conta Binance primeiro.',
+  'err.enable_live_trading': 'Ative o modo real nas configurações antes de enviar ordens com dinheiro real.',
+  'err.wrong_environment': 'Mude para o ambiente {environment} para gerenciar esta posição.',
   'prof.help': 'Custo = total pago em compras (você + robôs). Recebido = dinheiro de volta das vendas concluídas. Resultado realizado = lucro/prejuízo das operações já fechadas; posições abertas são dinheiro ainda investido. Os valores são na moeda de cotação de cada par (a moeda com que você paga).',
   'prof.none': 'Nenhuma operação ainda. Compre algo ou deixe um robô rodar para ver os resultados aqui.',
   'prof.spent': 'Custo das compras',
@@ -738,6 +760,17 @@ const es: Dictionary = {
   'alloc.tabAllocation': 'Asignación',
   'alloc.tabProfit': 'Rentabilidad',
   'buy.spotHint': 'Pagas en {quote} — mantén saldo de {quote} en tu billetera spot de Binance, o la compra falla.',
+  'err.sell_below_min_notional': 'Esta posición es demasiado pequeña para vender: su valor {value} está por debajo del valor mínimo de orden de Binance (NOTIONAL {minNotional}) para {symbol}.',
+  'err.buy_below_min_notional': 'El valor mínimo de orden para {symbol} es {minNotional} — ingresaste {entered}.',
+  'err.buy_exceeds_max': 'El monto de compra supera el máximo permitido por orden ({max}).',
+  'err.buy_amount_positive': 'El monto de compra debe ser mayor que cero.',
+  'err.trading_pair_required': 'Elige un par de negociación primero.',
+  'err.price_unavailable': 'El precio actual no está disponible para este par.',
+  'err.invalid_executed_quantity': 'Binance devolvió una cantidad ejecutada inválida. No se cobró nada.',
+  'err.operation_already_closed': 'Esta posición ya está cerrada.',
+  'err.connect_binance_first': 'Conecta una cuenta de Binance primero.',
+  'err.enable_live_trading': 'Activa el modo real en tus ajustes antes de enviar órdenes con dinero real.',
+  'err.wrong_environment': 'Cambia al entorno {environment} para gestionar esta posición.',
   'prof.help': 'Costo = total pagado en compras (tú + robots). Recibido = dinero de vuelta de las ventas completadas. Resultado realizado = ganancia/pérdida de las operaciones ya cerradas; las posiciones abiertas son dinero aún invertido. Los importes están en la moneda de cotización de cada par (la moneda con la que pagas).',
   'prof.none': 'Aún no hay operaciones. Compra algo o deja que un robot opere para ver los resultados aquí.',
   'prof.spent': 'Costo de las compras',
@@ -958,6 +991,24 @@ export const t = derived(locale, ($locale) => {
     return message
   }
 })
+
+// translateError turns an API error into a localized, user-facing message. If the error carries a
+// machine `code` (see ApiError in api.ts / the backend's UserFacingError), it looks up `err.<code>`
+// in the active dictionary and interpolates the error's `params`; otherwise it falls back to the
+// raw server message. `translate` is the current value of the `t` store (pass `$t`).
+export function translateError(
+  translate: (key: string, vars?: Record<string, string | number>) => string,
+  error: unknown
+): string {
+  const candidate = error as { code?: string; params?: Record<string, string>; message?: string }
+  if (candidate && typeof candidate.code === 'string' && candidate.code) {
+    const key = `err.${candidate.code}`
+    const localized = translate(key, candidate.params)
+    if (localized !== key) return localized
+  }
+  if (candidate && typeof candidate.message === 'string' && candidate.message) return candidate.message
+  return String(error)
+}
 
 // Map each UI language to a regional BCP-47 tag so dates/times/numbers follow the
 // convention of the country, not the browser's locale. pt → Brazil (dd/mm/yyyy, 24h),

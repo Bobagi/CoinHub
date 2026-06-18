@@ -230,6 +230,21 @@ the IP weight limit (above) bites first.
 - Profitability wording: "spent/gasto/gastado" → **"cost/custo/costo"** ("gasto" read as wasteful;
   "custo" is the correct cost-basis term, distinct from "still invested").
 
+### 2026-06 session (toast notifications + translated trade errors)
+- **Toast notifications** ("popcorn"): a global self-dismissing toast stack — `Toasts.svelte` mounted
+  once in `App.svelte`, driven by the `toasts` store + `pushToast`/`dismissToast` in `stores.ts`
+  (top-right, fly-in/fade-out, success/error/info variants, auto-dismiss ~4.5s / 7s for errors). Buy /
+  sell / (re)place-take-profit success **and** errors now surface as transient toasts instead of inline
+  text (the inline `tradeMsg`/`opsMsg`/`opsErr` were removed; `checkPrice`'s inline `tradeErr` stays).
+- **Translated trade errors**: service-layer trade-validation errors are now `*service.UserFacingError`
+  (`apps/api/internal/service/user_facing_error.go`) carrying a machine `code` + string `params`.
+  Handlers forward them via `writeServiceError` (JSON `{error, code, params}`); the SPA throws `ApiError`
+  (`api.ts`) and renders a localized string with `translateError($t, e)` against `err.<code>` keys
+  (en/pt/es) in `i18n.ts`, interpolating params. Falls back to the server's English `error` message for
+  any uncoded error. Covers NOTIONAL min-order (buy + sell), max-per-order, wrong-environment,
+  connect-Binance-first, enable-live-trading, price-unavailable, etc. **To add a new translatable
+  error: return `newUserError(code, englishMsg, params)` and add `err.<code>` to all three dicts.**
+
 ## TODO / backlog (roughly prioritized)
 1. **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history (commit
    `d891d08`); rotation still pending and history not purged. `CREDENTIALS_ENCRYPTION_KEY` must stay

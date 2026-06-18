@@ -54,6 +54,25 @@ func (handler *OperationsHandler) requireUser(responseWriter http.ResponseWriter
 	return userIdentifier, true
 }
 
+// errorBody is the JSON error envelope. Code/Params are populated for *service.UserFacingError so the
+// SPA can render a localized message; they are omitted (via omitempty) for plain errors.
+type errorBody struct {
+	Error  string            `json:"error"`
+	Code   string            `json:"code,omitempty"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+// writeServiceError writes err as JSON. A *service.UserFacingError is forwarded with its machine code
+// + params so the SPA can localize it; any other error falls back to its plain English message.
+func writeServiceError(responseWriter http.ResponseWriter, statusCode int, err error) {
+	var userError *service.UserFacingError
+	if errors.As(err, &userError) {
+		writeJSON(responseWriter, statusCode, errorBody{Error: userError.Message, Code: userError.Code, Params: userError.Params})
+		return
+	}
+	writeJSONError(responseWriter, statusCode, err.Error())
+}
+
 type buyRequestPayload struct {
 	Symbol              string  `json:"symbol"`
 	QuoteAmount         float64 `json:"quote_amount"`
@@ -120,7 +139,7 @@ func (handler *OperationsHandler) handleOperations(responseWriter http.ResponseW
 		}
 		operation, buyError := handler.tradingService.ExecuteBuy(operationContext, userIdentifier, domain.ExecutionInitiatorUser, payload.Symbol, payload.QuoteAmount, payload.TargetProfitPercent, nil)
 		if buyError != nil {
-			writeJSONError(responseWriter, http.StatusBadRequest, buyError.Error())
+			writeServiceError(responseWriter, http.StatusBadRequest, buyError)
 			return
 		}
 		writeJSON(responseWriter, http.StatusOK, toOperationPayload(*operation))
@@ -165,7 +184,7 @@ func (handler *OperationsHandler) handleSellOperation(responseWriter http.Respon
 			writeJSONError(responseWriter, http.StatusNotFound, "Operation not found.")
 			return
 		}
-		writeJSONError(responseWriter, http.StatusBadRequest, sellError.Error())
+		writeServiceError(responseWriter, http.StatusBadRequest, sellError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, toOperationPayload(*operation))
@@ -202,7 +221,7 @@ func (handler *OperationsHandler) handlePlaceSell(responseWriter http.ResponseWr
 			writeJSONError(responseWriter, http.StatusNotFound, "Operation not found.")
 			return
 		}
-		writeJSONError(responseWriter, http.StatusBadRequest, placeError.Error())
+		writeServiceError(responseWriter, http.StatusBadRequest, placeError)
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, toOperationPayload(*operation))

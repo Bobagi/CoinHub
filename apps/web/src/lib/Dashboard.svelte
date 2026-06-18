@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { api, type TradingSettings, type CredentialStatus, type Operation, type Execution, type Robot } from './api'
-  import { binanceStatus, currentUser } from './stores'
-  import { t, intlLocale, formatDateTime, formatDate } from './i18n'
+  import { binanceStatus, currentUser, pushToast } from './stores'
+  import { t, intlLocale, formatDateTime, formatDate, translateError } from './i18n'
   import AllocationPanel from './AllocationPanel.svelte'
   import ProfitabilityPanel from './ProfitabilityPanel.svelte'
   import PortfolioPanel from './PortfolioPanel.svelte'
@@ -62,14 +62,11 @@
   let tradeTarget = 1.5
   let tradePrice: number | null = null
   let tradeFilters: { min_notional: number; tick_size: number; step_size: number } | null = null
-  let tradeMsg = ''
   let tradeErr = ''
   let tradeBusy = false
 
   let sellBusyId: number | null = null
   let placeSellBusyId: number | null = null
-  let opsMsg = ''
-  let opsErr = ''
 
   // Robots: each is one automated bot for a single coin. The settings panel is hidden until a robot
   // is selected from the list.
@@ -333,19 +330,21 @@
 
   async function buy() {
     tradeBusy = true
-    tradeMsg = ''
     tradeErr = ''
     try {
       const operation = await api.buy(tradeSymbol, tradeAmount, tradeTarget)
-      tradeMsg = $t('buy.bought', {
-        qty: fmt(operation.quantity),
-        symbol: operation.symbol,
-        price: fmt(operation.purchase_price_per_unit)
-      })
+      pushToast(
+        $t('buy.bought', {
+          qty: fmt(operation.quantity),
+          symbol: operation.symbol,
+          price: fmt(operation.purchase_price_per_unit)
+        }),
+        'success'
+      )
       operations = await api.getOperations()
       loadExecutions()
     } catch (e) {
-      tradeErr = (e as Error).message
+      pushToast(translateError($t, e), 'error')
     } finally {
       tradeBusy = false
     }
@@ -354,15 +353,13 @@
   async function sellNow(operationId: number) {
     if (!confirm($t('ops.sellConfirm'))) return
     sellBusyId = operationId
-    opsMsg = ''
-    opsErr = ''
     try {
       await api.sellOperation(operationId)
-      opsMsg = $t('ops.sold')
+      pushToast($t('ops.sold'), 'success')
       operations = await api.getOperations()
       loadExecutions()
     } catch (e) {
-      opsErr = (e as Error).message
+      pushToast(translateError($t, e), 'error')
     } finally {
       sellBusyId = null
     }
@@ -371,15 +368,13 @@
   // Retry placing the take-profit sell order for a position whose original sell failed.
   async function placeSell(operationId: number) {
     placeSellBusyId = operationId
-    opsMsg = ''
-    opsErr = ''
     try {
       await api.placeSellOrder(operationId)
-      opsMsg = $t('ops.sellPlaced')
+      pushToast($t('ops.sellPlaced'), 'success')
       operations = await api.getOperations()
       loadExecutions()
     } catch (e) {
-      opsErr = (e as Error).message
+      pushToast(translateError($t, e), 'error')
     } finally {
       placeSellBusyId = null
     }
@@ -638,7 +633,6 @@
         <button class="btn-block mt-5" disabled={tradeBusy || belowMinimum || !(tradeAmount > 0)} on:click={buy}>
           {tradeBusy ? $t('buy.placing') : $t('buy.button')}
         </button>
-        {#if tradeMsg}<p class="success mt-3">{tradeMsg}</p>{/if}
         {#if tradeErr}<p class="error mt-3">{tradeErr}</p>{/if}
       </section>
 
@@ -840,8 +834,6 @@
           <p>{$t('ops.soldMeaning')}</p>
           <p>{$t('ops.sellOrderMeaning')}</p>
         </details>
-        {#if opsMsg}<p class="success mt-3">{opsMsg}</p>{/if}
-        {#if opsErr}<p class="error mt-3">{opsErr}</p>{/if}
         {#if visiblePositions.length === 0}
           <p class="muted mt-3">{$t('ops.none')}</p>
         {:else}

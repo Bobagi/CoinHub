@@ -87,6 +87,19 @@ export interface Execution {
   initiated_by: string
 }
 
+// ApiError carries the backend's machine-readable error code + params (from a *UserFacingError) so
+// callers can localize the message via i18n's translateError, falling back to `message` otherwise.
+export class ApiError extends Error {
+  code?: string
+  params?: Record<string, string>
+  constructor(message: string, code?: string, params?: Record<string, string>) {
+    super(message)
+    this.name = 'ApiError'
+    this.code = code
+    this.params = params
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown, isStepUpRetry = false): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -109,7 +122,7 @@ async function request<T>(method: string, path: string, body?: unknown, isStepUp
       return request<T>(method, path, body, true)
     }
     const message = data && typeof data.error === 'string' ? data.error : `Request failed (${response.status})`
-    throw new Error(message)
+    throw new ApiError(message, data?.code, data?.params)
   }
   return data as T
 }

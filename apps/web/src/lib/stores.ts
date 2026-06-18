@@ -18,6 +18,33 @@ export function closeModal() {
   appModal.set(null)
 }
 
+// Toasts — small self-dismissing "popcorn" notifications (success / error / info) stacked in a
+// corner. Used for transient action feedback (a sale placed, a trade rejected) instead of inline
+// text that's easy to miss. Rendered once globally by Toasts.svelte.
+export type ToastKind = 'success' | 'error' | 'info'
+export interface Toast {
+  id: number
+  kind: ToastKind
+  text: string
+}
+export const toasts = writable<Toast[]>([])
+let toastSequence = 0
+
+export function dismissToast(id: number) {
+  toasts.update((list) => list.filter((toast) => toast.id !== id))
+}
+
+// pushToast shows a toast and auto-dismisses it after durationMs (0 = stay until clicked). Errors
+// linger a bit longer by default so they can be read. Returns the toast id.
+export function pushToast(text: string, kind: ToastKind = 'info', durationMs = kind === 'error' ? 7000 : 4500): number {
+  const id = ++toastSequence
+  toasts.update((list) => [...list, { id, kind, text }])
+  if (durationMs > 0 && typeof setTimeout !== 'undefined') {
+    setTimeout(() => dismissToast(id), durationMs)
+  }
+  return id
+}
+
 // Step-up ("sudo") re-authentication. requestStepUp() opens the step-up modal and returns a promise
 // that resolves once the user re-confirms with their password (transparent retry), or rejects if
 // they cancel. The Google path navigates away, so that promise simply never resolves in this page

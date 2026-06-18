@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -47,15 +46,17 @@ func (service *UserTradingService) ExecuteBuy(operationContext context.Context, 
 func (service *UserTradingService) executeBuyWithType(operationContext context.Context, userIdentifier int64, initiatedBy string, tradingPairSymbol string, quoteAmount float64, targetProfitPercent float64, sellOrderValidityDaysOverride *int, buyExecutionType string) (*domain.TradingOperation, error) {
 	tradingPairSymbol = strings.ToUpper(strings.TrimSpace(tradingPairSymbol))
 	if tradingPairSymbol == "" {
-		return nil, errors.New("a trading pair is required")
+		return nil, newUserError("trading_pair_required", "a trading pair is required", nil)
 	}
 	if quoteAmount <= 0 {
-		return nil, errors.New("the buy amount must be greater than zero")
+		return nil, newUserError("buy_amount_positive", "the buy amount must be greater than zero", nil)
 	}
 	// Server-side ceiling: a sanity bound so a tampered request (or a misconfigured robot) can never
 	// place an order far larger than intended. Applies to both manual buys and the automation worker.
 	if service.maxQuoteAmountPerOrder > 0 && quoteAmount > service.maxQuoteAmountPerOrder {
-		return nil, fmt.Errorf("the buy amount exceeds the maximum allowed per order (%.2f)", service.maxQuoteAmountPerOrder)
+		return nil, newUserError("buy_exceeds_max",
+			fmt.Sprintf("the buy amount exceeds the maximum allowed per order (%.2f)", service.maxQuoteAmountPerOrder),
+			map[string]string{"max": fmt.Sprintf("%.2f", service.maxQuoteAmountPerOrder)})
 	}
 
 	environmentConfiguration, configurationError := service.credentialService.LoadActiveEnvironmentConfiguration(operationContext, userIdentifier)
@@ -63,7 +64,7 @@ func (service *UserTradingService) executeBuyWithType(operationContext context.C
 		return nil, configurationError
 	}
 	if environmentConfiguration == nil {
-		return nil, errors.New("connect a Binance account before trading")
+		return nil, newUserError("connect_binance_first", "connect a Binance account before trading", nil)
 	}
 	environmentName := environmentConfiguration.EnvironmentName
 
@@ -75,7 +76,7 @@ func (service *UserTradingService) executeBuyWithType(operationContext context.C
 		targetProfitPercent = 1.0
 	}
 	if environmentName == domain.BinanceEnvironmentProduction && (settings == nil || !settings.LiveTradingEnabled) {
-		return nil, errors.New("enable live trading in your settings before placing real-money orders")
+		return nil, newUserError("enable_live_trading", "enable live trading in your settings before placing real-money orders", nil)
 	}
 
 	tradingService := NewBinanceTradingService(*environmentConfiguration)
@@ -85,7 +86,11 @@ func (service *UserTradingService) executeBuyWithType(operationContext context.C
 	// message instead of a raw Binance -1013 NOTIONAL rejection.
 	symbolFilters, _ := tradingService.FetchSymbolFilters(operationContext, tradingPairSymbol)
 	if symbolFilters.MinNotional > 0 && quoteAmount < symbolFilters.MinNotional {
-		return nil, fmt.Errorf("the minimum order value for %s is %s — you entered %s", tradingPairSymbol, formatDecimal(symbolFilters.MinNotional), formatDecimal(quoteAmount))
+		minNotionalText := formatDecimal(symbolFilters.MinNotional)
+		enteredText := formatDecimal(quoteAmount)
+		return nil, newUserError("buy_below_min_notional",
+			fmt.Sprintf("the minimum order value for %s is %s — you entered %s", tradingPairSymbol, minNotionalText, enteredText),
+			map[string]string{"symbol": tradingPairSymbol, "minNotional": minNotionalText, "entered": enteredText})
 	}
 
 	currentPricePerUnit, priceError := priceService.GetCurrentPrice(operationContext, tradingPairSymbol)
@@ -93,7 +98,7 @@ func (service *UserTradingService) executeBuyWithType(operationContext context.C
 		return nil, fmt.Errorf("could not fetch the current price: %w", priceError)
 	}
 	if currentPricePerUnit <= 0 {
-		return nil, errors.New("the current price is unavailable for this pair")
+		return nil, newUserError("price_unavailable", "the current price is unavailable for this pair", nil)
 	}
 
 	// Only successful executions are recorded in history, so a failed buy returns the error to the
@@ -105,7 +110,7 @@ func (service *UserTradingService) executeBuyWithType(operationContext context.C
 
 	executedQuantity, _ := strconv.ParseFloat(buyOrderResponse.ExecutedQty, 64)
 	if executedQuantity <= 0 {
-		return nil, errors.New("Binance returned an invalid executed quantity")
+		return nil, newUserError("invalid_executed_quantity", "Binance returned an invalid executed quantity", nil)
 	}
 
 	purchasePricePerUnit := currentPricePerUnit
@@ -168,7 +173,7 @@ func (service *UserTradingService) CloseOperationNow(operationContext context.Co
 		return nil, lookupError
 	}
 	if operation.Status != domain.TradingOperationStatusOpen {
-		return nil, errors.New("this operation is already closed")
+		return nil, newUserError("operation_already_closed", "this operation is already closed", nil)
 	}
 
 	environmentConfiguration, configurationError := service.credentialService.LoadActiveEnvironmentConfiguration(operationContext, userIdentifier)
@@ -176,12 +181,12 @@ func (service *UserTradingService) CloseOperationNow(operationContext context.Co
 		return nil, configurationError
 	}
 	if environmentConfiguration == nil {
-		return nil, errors.New("connect a Binance account first")
+		return nil, newUserError("connect_binance_first", "connect a Binance account first", nil)
 	}
 	environmentName := environmentConfiguration.EnvironmentName
 	settings, _ := service.settingsRepository.GetByUserAndEnvironment(operationContext, userIdentifier, environmentName)
 	if environmentName == domain.BinanceEnvironmentProduction && (settings == nil || !settings.LiveTradingEnabled) {
-		return nil, errors.New("enable live trading in your settings before selling real-money positions")
+		return nil, newUserError("enable_live_trading", "enable live trading in your settings before selling real-money positions", nil)
 	}
 
 	tradingService := NewBinanceTradingService(*environmentConfiguration)
@@ -229,7 +234,7 @@ func (service *UserTradingService) PlaceTakeProfitForOperation(operationContext 
 		return nil, lookupError
 	}
 	if operation.Status != domain.TradingOperationStatusOpen {
-		return nil, errors.New("this operation is already closed")
+		return nil, newUserError("operation_already_closed", "this operation is already closed", nil)
 	}
 
 	environmentConfiguration, configurationError := service.credentialService.LoadActiveEnvironmentConfiguration(operationContext, userIdentifier)
@@ -237,15 +242,17 @@ func (service *UserTradingService) PlaceTakeProfitForOperation(operationContext 
 		return nil, configurationError
 	}
 	if environmentConfiguration == nil {
-		return nil, errors.New("connect a Binance account first")
+		return nil, newUserError("connect_binance_first", "connect a Binance account first", nil)
 	}
 	environmentName := environmentConfiguration.EnvironmentName
 	if operation.BinanceEnvironment != "" && operation.BinanceEnvironment != environmentName {
-		return nil, fmt.Errorf("switch to the %s environment to manage this position", operation.BinanceEnvironment)
+		return nil, newUserError("wrong_environment",
+			fmt.Sprintf("switch to the %s environment to manage this position", operation.BinanceEnvironment),
+			map[string]string{"environment": operation.BinanceEnvironment})
 	}
 	settings, _ := service.settingsRepository.GetByUserAndEnvironment(operationContext, userIdentifier, environmentName)
 	if environmentName == domain.BinanceEnvironmentProduction && (settings == nil || !settings.LiveTradingEnabled) {
-		return nil, errors.New("enable live trading in your settings before placing real-money orders")
+		return nil, newUserError("enable_live_trading", "enable live trading in your settings before placing real-money orders", nil)
 	}
 
 	tradingService := NewBinanceTradingService(*environmentConfiguration)
@@ -326,7 +333,7 @@ func (service *UserTradingService) ListOpenOrders(loadContext context.Context, u
 		return nil, configurationError
 	}
 	if environmentConfiguration == nil {
-		return nil, errors.New("connect a Binance account first")
+		return nil, newUserError("connect_binance_first", "connect a Binance account first", nil)
 	}
 
 	tradingPairSymbol = strings.ToUpper(strings.TrimSpace(tradingPairSymbol))
