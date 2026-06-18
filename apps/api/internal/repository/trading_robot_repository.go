@@ -16,7 +16,7 @@ var ErrRobotNotFound = errors.New("robot not found")
 var ErrRobotSymbolExists = errors.New("a robot already exists for this coin in this environment")
 
 const tradingRobotColumns = `id, user_id, binance_environment, trading_pair_symbol, COALESCE(name, ''),
-	capital_threshold, target_profit_percent, stop_loss_percent, daily_purchase_hour_utc,
+	capital_threshold, max_invested, target_profit_percent, stop_loss_percent, daily_purchase_hour_utc,
 	daily_purchase_enabled, sell_order_validity_days, is_enabled, created_at, updated_at`
 
 // TradingRobotRepository persists trading robots, always scoped to a single user (and usually a
@@ -85,8 +85,8 @@ func (repository *PostgresTradingRobotRepository) CreateRobotForUser(operationCo
 		operationContext,
 		`INSERT INTO trading_robots
 		    (user_id, binance_environment, trading_pair_symbol, name, capital_threshold, target_profit_percent,
-		     stop_loss_percent, daily_purchase_hour_utc, daily_purchase_enabled, sell_order_validity_days, is_enabled)
-		 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11)
+		     stop_loss_percent, daily_purchase_hour_utc, daily_purchase_enabled, sell_order_validity_days, is_enabled, max_invested)
+		 VALUES ($1, $2, $3, NULLIF($4, ''), $5, $6, $7, $8, $9, $10, $11, $12)
 		 RETURNING id`,
 		userIdentifier,
 		robot.BinanceEnvironment,
@@ -99,6 +99,7 @@ func (repository *PostgresTradingRobotRepository) CreateRobotForUser(operationCo
 		robot.DailyPurchaseEnabled,
 		robot.SellOrderValidityDays,
 		robot.IsEnabled,
+		robot.MaxInvested,
 	)
 	var robotIdentifier int64
 	if scanError := row.Scan(&robotIdentifier); scanError != nil {
@@ -122,8 +123,9 @@ func (repository *PostgresTradingRobotRepository) UpdateRobotForUser(operationCo
 		    daily_purchase_enabled = $6,
 		    sell_order_validity_days = $7,
 		    is_enabled = $8,
+		    max_invested = $9,
 		    updated_at = NOW()
-		 WHERE id = $9 AND user_id = $10`,
+		 WHERE id = $10 AND user_id = $11`,
 		robot.Name,
 		robot.CapitalThreshold,
 		robot.TargetProfitPercent,
@@ -132,6 +134,7 @@ func (repository *PostgresTradingRobotRepository) UpdateRobotForUser(operationCo
 		robot.DailyPurchaseEnabled,
 		robot.SellOrderValidityDays,
 		robot.IsEnabled,
+		robot.MaxInvested,
 		robot.Identifier,
 		userIdentifier,
 	)
@@ -178,6 +181,7 @@ func scanTradingRobotRow(row *sql.Row) (*domain.TradingRobot, error) {
 		&robot.TradingPairSymbol,
 		&robot.Name,
 		&robot.CapitalThreshold,
+		&robot.MaxInvested,
 		&robot.TargetProfitPercent,
 		&stopLossPercent,
 		&robot.DailyPurchaseHourUTC,
@@ -209,6 +213,7 @@ func scanTradingRobotRows(rows *sql.Rows) ([]domain.TradingRobot, error) {
 			&robot.TradingPairSymbol,
 			&robot.Name,
 			&robot.CapitalThreshold,
+			&robot.MaxInvested,
 			&robot.TargetProfitPercent,
 			&stopLossPercent,
 			&robot.DailyPurchaseHourUTC,

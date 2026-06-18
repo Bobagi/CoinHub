@@ -15,18 +15,20 @@ import (
 // RobotsHandler serves the per-user trading-robot endpoints. A robot is one automated bot for a
 // single coin; standard users may have one per environment, admins unlimited.
 type RobotsHandler struct {
-	sessionService *service.SessionService
-	authService    *service.AuthService
-	cookieName     string
-	robotService   *service.RobotService
+	sessionService      *service.SessionService
+	authService         *service.AuthService
+	cookieName          string
+	robotService        *service.RobotService
+	maxOrderQuoteAmount float64 // global per-order spending ceiling, exposed so the UI can explain it
 }
 
-func NewRobotsHandler(sessionService *service.SessionService, authService *service.AuthService, cookieName string, robotService *service.RobotService) *RobotsHandler {
+func NewRobotsHandler(sessionService *service.SessionService, authService *service.AuthService, cookieName string, robotService *service.RobotService, maxOrderQuoteAmount float64) *RobotsHandler {
 	return &RobotsHandler{
-		sessionService: sessionService,
-		authService:    authService,
-		cookieName:     cookieName,
-		robotService:   robotService,
+		sessionService:      sessionService,
+		authService:         authService,
+		cookieName:          cookieName,
+		robotService:        robotService,
+		maxOrderQuoteAmount: maxOrderQuoteAmount,
 	}
 }
 
@@ -63,6 +65,7 @@ type robotPayload struct {
 	Symbol                string   `json:"symbol"`
 	Name                  string   `json:"name"`
 	CapitalThreshold      float64  `json:"capital_threshold"`
+	MaxInvested           float64  `json:"max_invested"`
 	TargetProfitPercent   float64  `json:"target_profit_percent"`
 	StopLossPercent       *float64 `json:"stop_loss_percent"`
 	DailyPurchaseHourUTC  int      `json:"daily_purchase_hour_utc"`
@@ -76,6 +79,7 @@ type robotInputPayload struct {
 	Symbol                string   `json:"symbol"`
 	Name                  string   `json:"name"`
 	CapitalThreshold      float64  `json:"capital_threshold"`
+	MaxInvested           float64  `json:"max_invested"`
 	TargetProfitPercent   float64  `json:"target_profit_percent"`
 	StopLossPercent       *float64 `json:"stop_loss_percent"`
 	DailyPurchaseHourUTC  int      `json:"daily_purchase_hour_utc"`
@@ -89,6 +93,7 @@ func (payload robotInputPayload) toServiceInput() service.RobotInput {
 		TradingPairSymbol:     payload.Symbol,
 		Name:                  payload.Name,
 		CapitalThreshold:      payload.CapitalThreshold,
+		MaxInvested:           payload.MaxInvested,
 		TargetProfitPercent:   payload.TargetProfitPercent,
 		StopLossPercent:       payload.StopLossPercent,
 		DailyPurchaseHourUTC:  payload.DailyPurchaseHourUTC,
@@ -114,9 +119,10 @@ func (handler *RobotsHandler) handleRobots(responseWriter http.ResponseWriter, r
 			return
 		}
 		writeJSON(responseWriter, http.StatusOK, map[string]interface{}{
-			"robots":   toRobotPayloads(robots),
-			"limit":    service.RobotLimitForAdmin(currentUser.IsAdmin), // 0 = unlimited
-			"is_admin": currentUser.IsAdmin,
+			"robots":                 toRobotPayloads(robots),
+			"limit":                  service.RobotLimitForAdmin(currentUser.IsAdmin), // 0 = unlimited
+			"is_admin":               currentUser.IsAdmin,
+			"max_order_quote_amount": handler.maxOrderQuoteAmount, // 0 = no per-order cap
 		})
 
 	case http.MethodPost:
@@ -227,6 +233,7 @@ func toRobotPayload(robot domain.TradingRobot) robotPayload {
 		Symbol:                robot.TradingPairSymbol,
 		Name:                  robot.Name,
 		CapitalThreshold:      robot.CapitalThreshold,
+		MaxInvested:           robot.MaxInvested,
 		TargetProfitPercent:   robot.TargetProfitPercent,
 		StopLossPercent:       robot.StopLossPercent,
 		DailyPurchaseHourUTC:  robot.DailyPurchaseHourUTC,

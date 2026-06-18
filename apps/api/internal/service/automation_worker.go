@@ -334,6 +334,21 @@ func (worker *AutomationWorker) processDailyPurchasesForUser(applicationContext 
 			continue
 		}
 
+		// Max-invested ceiling: skip the buy while open positions for this coin already hold (or would,
+		// after this buy) more than the cap — the robot waits for a take-profit/stop-loss to free capital
+		// before buying again. 0 = no cap. Fail-closed (skip) on a read error so we never over-invest.
+		if robot.MaxInvested > 0 {
+			openAllocation, allocationError := worker.operationRepository.CalculateOpenAllocationForUserSymbol(applicationContext, userIdentifier, environmentName, robot.TradingPairSymbol)
+			if allocationError != nil {
+				log.Printf("automation: skipping daily buy for user %d robot %d (%s): could not read open allocation: %v", userIdentifier, robot.Identifier, robot.TradingPairSymbol, allocationError)
+				continue
+			}
+			if openAllocation+robot.CapitalThreshold > robot.MaxInvested {
+				log.Printf("automation: skipping daily buy for user %d robot %d (%s): open allocation %.2f + buy %.2f would exceed max invested %.2f", userIdentifier, robot.Identifier, robot.TradingPairSymbol, openAllocation, robot.CapitalThreshold, robot.MaxInvested)
+				continue
+			}
+		}
+
 		log.Printf("automation: running daily purchase for user %d robot %d (%s)", userIdentifier, robot.Identifier, robot.TradingPairSymbol)
 		if _, purchaseError := worker.tradingService.ExecuteDailyPurchase(applicationContext, userIdentifier, environmentName, robot.TradingPairSymbol, robot.CapitalThreshold, robot.TargetProfitPercent, robot.SellOrderValidityDays); purchaseError != nil {
 			log.Printf("automation: daily purchase failed for user %d robot %d: %v", userIdentifier, robot.Identifier, purchaseError)

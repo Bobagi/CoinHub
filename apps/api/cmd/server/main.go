@@ -73,11 +73,12 @@ func main() {
 	userCredentialService := service.NewUserCredentialService(binanceCredentialRepository, userRepository, secretCipher, testnetBaseURL, productionBaseURL)
 	apiHandler := httpserver.NewAPIHandler(sessionService, authService, authHandler.CookieName, userTradingSettingsRepository, userCredentialService, testnetBaseURL, productionBaseURL)
 
-	userTradingService := service.NewUserTradingService(userCredentialService, userTradingSettingsRepository, tradingOperationRepository, tradingOperationExecutionRepository, maxQuoteAmountPerOrderFromEnv(100000))
+	maxOrderQuoteAmount := maxQuoteAmountPerOrderFromEnv(100000)
+	userTradingService := service.NewUserTradingService(userCredentialService, userTradingSettingsRepository, tradingOperationRepository, tradingOperationExecutionRepository, maxOrderQuoteAmount)
 	operationsHandler := httpserver.NewOperationsHandler(sessionService, authService, authHandler.CookieName, userTradingService)
 
 	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService)
-	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, authHandler.CookieName, robotService)
+	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
 
 	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, 30*time.Second)
 

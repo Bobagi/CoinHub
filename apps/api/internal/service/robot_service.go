@@ -35,6 +35,7 @@ type RobotInput struct {
 	TradingPairSymbol     string
 	Name                  string
 	CapitalThreshold      float64
+	MaxInvested           float64
 	TargetProfitPercent   float64
 	StopLossPercent       *float64
 	DailyPurchaseHourUTC  int
@@ -128,6 +129,10 @@ func normalizeRobot(input RobotInput, environment string) domain.TradingRobot {
 	if capital < 0 {
 		capital = 0
 	}
+	maxInvested := input.MaxInvested
+	if maxInvested < 0 {
+		maxInvested = 0
+	}
 	var stopLossPercent *float64
 	if input.StopLossPercent != nil && *input.StopLossPercent > 0 {
 		value := *input.StopLossPercent
@@ -139,6 +144,7 @@ func normalizeRobot(input RobotInput, environment string) domain.TradingRobot {
 		TradingPairSymbol:     symbol,
 		Name:                  name,
 		CapitalThreshold:      capital,
+		MaxInvested:           maxInvested,
 		TargetProfitPercent:   targetProfitPercent,
 		StopLossPercent:       stopLossPercent,
 		DailyPurchaseHourUTC:  dailyHour,

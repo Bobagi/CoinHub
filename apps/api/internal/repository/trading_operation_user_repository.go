@@ -27,6 +27,7 @@ type UserTradingOperationRepository interface {
 	MarkOperationCanceledForUser(operationContext context.Context, userIdentifier int64, operationIdentifier int64) error
 	ClearSellOrderForUser(operationContext context.Context, userIdentifier int64, operationIdentifier int64) error
 	CalculateOpenAllocationTotalForUser(loadContext context.Context, userIdentifier int64, environment string) (float64, error)
+	CalculateOpenAllocationForUserSymbol(loadContext context.Context, userIdentifier int64, environment string, tradingPairSymbol string) (float64, error)
 }
 
 func (repository *PostgresTradingOperationRepository) CreatePurchaseOperationForUser(operationContext context.Context, userIdentifier int64, operation domain.TradingOperation) (int64, error) {
@@ -146,6 +147,21 @@ func (repository *PostgresTradingOperationRepository) CalculateOpenAllocationTot
 		loadContext,
 		`SELECT COALESCE(SUM(quantity_purchased * purchase_price_per_unit), 0) FROM trading_operations WHERE user_id = $1 AND binance_environment = $2 AND status = $3`,
 		userIdentifier, environment, domain.TradingOperationStatusOpen,
+	)
+	var totalAllocated float64
+	if scanError := row.Scan(&totalAllocated); scanError != nil {
+		return 0, scanError
+	}
+	return totalAllocated, nil
+}
+
+// CalculateOpenAllocationForUserSymbol sums the cost basis (quantity × buy price) of the user's OPEN
+// positions for one coin in one environment — used to enforce a robot's max-invested ceiling.
+func (repository *PostgresTradingOperationRepository) CalculateOpenAllocationForUserSymbol(loadContext context.Context, userIdentifier int64, environment string, tradingPairSymbol string) (float64, error) {
+	row := repository.Database.QueryRowContext(
+		loadContext,
+		`SELECT COALESCE(SUM(quantity_purchased * purchase_price_per_unit), 0) FROM trading_operations WHERE user_id = $1 AND binance_environment = $2 AND trading_pair_symbol = $3 AND status = $4`,
+		userIdentifier, environment, tradingPairSymbol, domain.TradingOperationStatusOpen,
 	)
 	var totalAllocated float64
 	if scanError := row.Scan(&totalAllocated); scanError != nil {

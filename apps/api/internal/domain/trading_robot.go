@@ -11,7 +11,8 @@ type TradingRobot struct {
 	BinanceEnvironment    string
 	TradingPairSymbol     string
 	Name                  string
-	CapitalThreshold      float64
+	CapitalThreshold      float64 // the quote amount each daily DCA buy spends ("Capital per buy")
+	MaxInvested           float64 // max total open allocation (cost basis) for this coin; 0 = no cap
 	TargetProfitPercent   float64
 	StopLossPercent       *float64 // nil means no stop-loss configured
 	DailyPurchaseHourUTC  int

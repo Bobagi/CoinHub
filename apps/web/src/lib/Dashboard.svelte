@@ -72,6 +72,7 @@
   // is selected from the list.
   let robots: Robot[] = []
   let robotLimit = 1 // 0 = unlimited (admins)
+  let maxOrderQuoteAmount = 0 // global per-order spending ceiling (from the API); 0 = no cap
   let selectedRobotId: number | null = null
   let creatingRobot = false
   let newRobotSymbol = 'BTCUSDT'
@@ -406,6 +407,7 @@
       const response = await api.getRobots()
       robots = response.robots
       robotLimit = response.limit
+      maxOrderQuoteAmount = response.max_order_quote_amount ?? 0
     } catch {
       robots = []
     }
@@ -428,6 +430,7 @@
         symbol: newRobotSymbol,
         name: newRobotSymbol,
         capital_threshold: 0,
+        max_invested: 0,
         target_profit_percent: 1.5,
         stop_loss_percent: null,
         daily_purchase_hour_utc: localHourToUtc(4),
@@ -691,28 +694,35 @@
               <input id="robot-capital" type="number" bind:value={robotDraft.capital_threshold} min="0" step="0.01" />
             </div>
             <div class="field" style="margin-top:0">
+              <label for="robot-max-invested">{$t('settings.maxInvested')}</label>
+              <input id="robot-max-invested" type="number" bind:value={robotDraft.max_invested} min="0" step="0.01" placeholder={$t('settings.maxInvestedNone')} />
+            </div>
+          </div>
+          <p class="muted">{$t('settings.maxInvestedHelp')}{#if maxOrderQuoteAmount > 0} {$t('settings.maxOrderHelp', { max: fmt(maxOrderQuoteAmount) })}{/if}</p>
+          <div class="grid-2 mt-4">
+            <div class="field" style="margin-top:0">
               <label for="robot-target">{$t('settings.target')}</label>
               <input id="robot-target" type="number" bind:value={robotDraft.target_profit_percent} min="0" step="0.01" />
             </div>
-          </div>
-          <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
               <label for="robot-stop">{$t('settings.stopLoss')}</label>
               <input id="robot-stop" type="number" bind:value={robotDraft.stop_loss_percent} min="0" step="0.01" placeholder={$t('settings.stopLossNone')} />
             </div>
+          </div>
+          <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
               <label for="robot-daily-time">{$t('settings.dailyTime')}</label>
               <select id="robot-daily-time" bind:value={robotDailyHourLocal}>
                 {#each hours as hour}<option value={hour}>{formatHour(hour)}</option>{/each}
               </select>
             </div>
+            <div class="field" style="margin-top:0">
+              <label for="robot-validity">{$t('settings.validity')}</label>
+              <input id="robot-validity" type="number" bind:value={robotDraft.sell_order_validity_days} min="0" max="365" step="1" />
+            </div>
           </div>
           <p class="muted tz-note">{$t('settings.timezoneNote', { tz: localTimeZone, offset: tzOffset })}</p>
-          <div class="field">
-            <label for="robot-validity">{$t('settings.validity')}</label>
-            <input id="robot-validity" type="number" bind:value={robotDraft.sell_order_validity_days} min="0" max="365" step="1" />
-            <span class="muted">{$t('settings.validityHelp')}</span>
-          </div>
+          <p class="muted">{$t('settings.validityHelp')}</p>
           <div class="robot-editor-actions mt-5">
             <button class="danger btn-sm" disabled={robotBusy} on:click={() => deleteRobot(robotDraft.id)}>{$t('robots.delete')}</button>
             <button class="btn-sm" disabled={robotBusy} on:click={saveRobot}>{robotBusy ? $t('settings.saving') : $t('settings.save')}</button>

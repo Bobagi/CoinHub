@@ -48,21 +48,21 @@ stop-loss). The robot reviews open positions about every 30 seconds.
 |---|---|
 | **Coin/pair** | The market the robot trades (e.g. `BTCBRL`). It buys using the *quote* currency — the asset at the **end** of the pair (`BTCBRL` → BRL, `BTCUSDT` → USDT) — so keep enough of it in your Binance spot wallet. |
 | **Capital per buy** | How much of the quote currency each daily DCA buy spends. `0` disables the daily buy. |
+| **Max invested** | The most the robot keeps invested in this coin at once (cost basis of open positions). When it's reached, the daily buy pauses and resumes only after a position sells to free up room. `0` = no limit. |
 | **Target profit %** | How far above the buy price the automatic take-profit sell is placed. |
 | **Stop-loss %** | How far below the buy price to market-sell as a safety exit. Empty = disabled. |
 | **Daily buy time** | The time (your timezone) the one daily DCA buy runs. |
 | **Sell-order validity (days)** | How long a take-profit order stays open before auto-cancelling. `0` = never expires (GTC). |
 | **Environment** | **Testnet** (practice, fake money) or **Production** (real money, requires opt-in). |
 
-### Spending limits — what exists today
-- **Per-order ceiling (active):** every buy — manual or robot — is capped server-side at
-  `MAX_ORDER_QUOTE_AMOUNT` (default 100,000 in the quote currency). It's an anti-mistake / anti-abuse
-  guardrail, not a per-robot setting, and is **not yet surfaced in the UI**.
-- **Total-invested ceiling (not active):** an earlier single-user version had a "capital threshold"
-  that capped how much could be invested at once — the bot would wait for a position to sell before
-  buying again. The multi-user robot rewrite **removed that behaviour**; the leftover `CapitalThreshold`
-  field now simply means "Capital per buy". If you want a max-exposure cap back, it must be rebuilt
-  (tracked in the CLAUDE.md backlog).
+### Spending limits — both active
+- **Per-order ceiling:** every buy — manual or robot — is capped server-side at
+  `MAX_ORDER_QUOTE_AMOUNT` (default 100,000 in the quote currency). It's a global anti-mistake /
+  anti-abuse guardrail, not a per-robot setting; its value is shown as a help line in the robot editor.
+- **Per-robot max-invested ceiling:** the **Max invested** setting (above) caps the total kept invested
+  in a coin at once. The robot's daily buy pauses when open positions for that coin reach the cap and
+  resumes once one sells to free capital. `0` = no limit. (Manual buys are not blocked by this cap —
+  only the robot's automatic daily buy is.)
 
 > Standard accounts get **1 robot per environment**; admins get unlimited (a monetization hook —
 > billing isn't built yet).

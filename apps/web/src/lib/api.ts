@@ -43,6 +43,7 @@ export interface Robot {
   symbol: string
   name: string
   capital_threshold: number
+  max_invested: number
   target_profit_percent: number
   stop_loss_percent: number | null
   daily_purchase_hour_utc: number
@@ -55,6 +56,7 @@ export interface RobotsResponse {
   robots: Robot[]
   limit: number // 0 = unlimited (admins)
   is_admin: boolean
+  max_order_quote_amount: number // global per-order spending ceiling; 0 = no cap
 }
 
 export interface Operation {
