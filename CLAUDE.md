@@ -252,6 +252,41 @@ the IP weight limit (above) bites first.
   connect-Binance-first, enable-live-trading, price-unavailable, etc. **To add a new translatable
   error: return `newUserError(code, englishMsg, params)` and add `err.<code>` to all three dicts.**
 
+## Trading strategy, terminology & spending caps (what the robots actually do / don't)
+Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
+help text. **Be precise: say what we do AND what we don't.**
+
+**What a robot is:** one automated bot bound to a single coin/pair in one environment. It runs a
+**DCA + take-profit (+ optional stop-loss)** strategy — *not* arbitrage, *not* grid. Mechanics live in
+`AutomationWorker` + `UserTradingService`:
+- **DCA (the daily buy):** once/day at `DailyPurchaseHourUTC`, market-buys a fixed quote amount
+  (`CapitalThreshold`, shown in the UI as **"Capital per buy"**) of the coin, idempotent per day/symbol.
+- **Take-profit (the automatic sale):** each buy places a resting limit SELL at `TargetProfitPercent`
+  above its fill; reconciled to "sold" when filled. `SellOrderValidityDays` (0 = GTC) auto-cancels it
+  after N days.
+- **Stop-loss (optional safety exit):** if price falls `StopLossPercent` below the buy price, cancel
+  the take-profit and market-sell. Nil/empty = disabled.
+
+**We are NOT:**
+- **arbitrage** — only one exchange per user (Binance), so cross-exchange arbitrage is architecturally
+  impossible here (and major-exchange spreads are < 0.5% now anyway).
+- **grid trading** — no buy-low/sell-high laddering across a price range. (A genuine backlog idea: grid
+  suits the sideways markets that dominate ~60–70% of the time, so it would be a real new robot type.)
+- **a profit guarantee** — returns depend on market/coin/config; hence testnet-first + non-custodial.
+
+**Spending caps — the truth (currently under-explained in the UI):**
+- **Per-order ceiling — ACTIVE.** `maxQuoteAmountPerOrder` (env `MAX_ORDER_QUOTE_AMOUNT`, default
+  `100000`) is enforced in `executeBuyWithType`, so it covers BOTH manual buys and the daily DCA. It's a
+  global server-side anti-tamper / anti-fat-finger bound, **not** a per-robot setting, and is **not shown
+  in the UI**.
+- **Total-invested / max-exposure ceiling — NOT ACTIVE (known regression).** The "cap total open
+  allocation; wait for a position to sell before buying more" behavior (`ensureCapitalThresholdNotExceeded`:
+  `openAllocationTotal + purchaseValueTotal > CapitalThreshold`) exists ONLY in the **legacy single-user
+  `TradingOperationService`, which is dead/unwired**. The multi-user robot rewrite **repurposed the
+  `CapitalThreshold` field to mean the per-buy amount**, so robot buys currently have **no max-exposure
+  gate** — the field name is now misleading. To bring it back, add a separate `max_invested`/exposure
+  field + a pre-buy check in `executeBuyWithType`/`ExecuteDailyPurchase` (see backlog).
+
 ## TODO / backlog (roughly prioritized)
 1. **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history (commit
    `d891d08`); rotation still pending and history not purged. `CREDENTIALS_ENCRYPTION_KEY` must stay
@@ -270,6 +305,11 @@ the IP weight limit (above) bites first.
    the old single-user services they used remain as dead code).
 8. **Robot monetization** — standard users are capped at 1 robot/environment
    (`StandardUserRobotLimitPerEnvironment`), admins unlimited; the payment/billing piece is not built.
+9. **Surface + restore spending caps** — the per-order cap (`MAX_ORDER_QUOTE_AMOUNT`) is active but
+   invisible in the UI; the **max-total-invested / wait-to-sell ceiling is no longer active** (only in
+   dead legacy code — `CapitalThreshold` was repurposed as the per-buy amount). Decide whether to rebuild
+   a per-robot/per-user max-exposure cap (new field + pre-buy check) and show both caps in the UI. See
+   "Trading strategy, terminology & spending caps".
 
 ## Don't print secrets
 `.env`, `/root/commands_band_share.txt`, and any API keys. Never echo/commit them.
