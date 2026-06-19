@@ -47,7 +47,7 @@ docker-compose.yml   db + migrate + api (+ scraper under the `scraper` profile).
 `/api/v1/binance/{credentials,credentials/activate,price,symbols,symbol-filters,klines,open-orders}` ·
 `/api/v1/operations` (GET list / POST buy) · `/api/v1/operations/sell` (POST close-now) · `/api/v1/operations/place-sell` (POST (re)place take-profit) · `/api/v1/operations/executions` ·
 `/api/v1/portfolio/{source,assets,dividends}` ·
-`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account` (DELETE) · `/health`.
+`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account` (DELETE) · `/health`.
 Sessions = opaque random token in a Secure httpOnly cookie (`coin_hub_session`); only its SHA-256
 hash is stored.
 
@@ -263,6 +263,26 @@ the IP weight limit (above) bites first.
   en/pt/es). Dashboard fetches `getPrice` for the distinct open symbols into `currentPrices` —
   reactively when the open-symbol set changes, plus a 30s refresh while the Positions sub-tab is open
   (backend price cache is 5s). The actions column was widened (140px→200px) to fit arrow + button.
+
+### 2026-06 session (account access history + new-device alert email)
+- **Durable sign-in log** (migration 0024 `account_access_events`): every successful login is recorded
+  append-only with `ip_address`, `user_agent`, `auth_method` (`PASSWORD`/`GOOGLE`/`SIGNUP`),
+  `device_fingerprint` = `SHA-256(user_agent + '|' + ip)`, `is_new_device`, `created_at`. Unlike
+  `user_sessions` (purged on expiry) these survive, so they form the account's access history and the
+  basis for new-device detection. IP + UA are PII; the FK `ON DELETE CASCADE` erases them with the
+  account (consistent with the privacy-preserving hard delete).
+- **`AccessLogService`** (`service/access_log_service.go`) is wired into all three login paths
+  (`auth_handler.go` signup/password/Google) via `recordAccess` → `RecordLoginAsync` (best-effort, off
+  the request path — never blocks/fails a login). It records the event and, **only when the fingerprint
+  is new AND the account already had ≥1 prior access** (so the very first sign-in and signup never
+  alert), sends a security email via `AccountEmailService.SendNewAccessAlert` →
+  `newAccessAlertEmail` (en/pt/es, branded details table device/IP/when, links to `/#/account`). Read
+  errors fail safe (treated as a known device, no false alert).
+- **UI**: an "Access history" card in `AccountSettings.svelte` (server-paged via the shared
+  `Pagination.svelte`, `GET /api/v1/account/access?page&page_size`) — columns When / Device / IP /
+  Method, a "New device" badge, friendly `deviceLabel()` from the UA (full UA in `title`). i18n
+  `account.access.*` (en/pt/es). **The email alert only fires when SMTP is configured** (`Sender`
+  no-op otherwise); recording + the history list work regardless.
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add

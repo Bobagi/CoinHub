@@ -1,8 +1,66 @@
 <script lang="ts">
-  import { api } from './api'
+  import { api, type AccessEvent } from './api'
   import { currentUser, navigate, notifyError } from './stores'
   import { t, intlLocale } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
+  import Pagination from './Pagination.svelte'
+
+  let accessEvents: AccessEvent[] = []
+  let accessTotal = 0
+  let accessPage = 1
+  let accessPageSize = 10
+  let accessBusy = false
+  let accessRequestToken = 0
+
+  // Server-side paging: reload whenever the page or page size changes (and once on mount).
+  $: loadAccessHistory(accessPage, accessPageSize)
+
+  async function loadAccessHistory(page: number, pageSize: number) {
+    const token = ++accessRequestToken
+    accessBusy = true
+    try {
+      const result = await api.getAccessHistory(page, pageSize)
+      if (token !== accessRequestToken) return // a newer request superseded this one
+      accessEvents = result.events
+      accessTotal = result.total
+    } catch (error) {
+      if (token === accessRequestToken) notifyError(error)
+    } finally {
+      if (token === accessRequestToken) accessBusy = false
+    }
+  }
+
+  function formatAccessTime(timestamp: string): string {
+    return new Date(timestamp).toLocaleString($intlLocale, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    })
+  }
+
+  // Best-effort friendly label from the raw user agent (browser · OS); falls back to the raw string.
+  function deviceLabel(userAgent: string): string {
+    if (!userAgent) return '—'
+    const os = /Windows/i.test(userAgent) ? 'Windows'
+      : /Android/i.test(userAgent) ? 'Android'
+      : /iPhone|iPad|iPod|iOS/i.test(userAgent) ? 'iOS'
+      : /Mac OS X|Macintosh/i.test(userAgent) ? 'macOS'
+      : /Linux/i.test(userAgent) ? 'Linux' : ''
+    const browser = /Edg\//i.test(userAgent) ? 'Edge'
+      : /OPR\/|Opera/i.test(userAgent) ? 'Opera'
+      : /Chrome\//i.test(userAgent) ? 'Chrome'
+      : /Firefox\//i.test(userAgent) ? 'Firefox'
+      : /Safari\//i.test(userAgent) ? 'Safari' : ''
+    const parts = [browser, os].filter(Boolean)
+    return parts.length ? parts.join(' · ') : userAgent
+  }
+
+  function methodLabel(method: string): string {
+    switch (method) {
+      case 'PASSWORD': return $t('account.access.methodPassword')
+      case 'GOOGLE': return $t('account.access.methodGoogle')
+      case 'SIGNUP': return $t('account.access.methodSignup')
+      default: return method
+    }
+  }
 
   let name = $currentUser?.display_name ?? ''
   let profileMsg = ''
@@ -148,6 +206,43 @@
     <LanguageDropdown />
   </section>
 
+  <section class="card">
+    <div class="card-header">
+      <span class="card-title">{$t('account.access.title')}</span>
+      <span class="card-subtitle">{$t('account.access.subtitle')}</span>
+    </div>
+    {#if accessEvents.length === 0}
+      <p class="muted mt-2">{accessBusy ? $t('account.access.loading') : $t('account.access.empty')}</p>
+    {:else}
+      <div class="access-scroll mt-2">
+        <table class="access-table">
+          <thead>
+            <tr>
+              <th>{$t('account.access.when')}</th>
+              <th>{$t('account.access.device')}</th>
+              <th>{$t('account.access.ip')}</th>
+              <th>{$t('account.access.method')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each accessEvents as event (event.id)}
+              <tr>
+                <td class="nowrap">{formatAccessTime(event.created_at)}</td>
+                <td>
+                  <span title={event.user_agent || ''}>{deviceLabel(event.user_agent)}</span>
+                  {#if event.is_new_device}<span class="new-badge">{$t('account.access.new')}</span>{/if}
+                </td>
+                <td class="nowrap mono">{event.ip_address || '—'}</td>
+                <td class="nowrap">{methodLabel(event.auth_method)}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      <Pagination total={accessTotal} bind:page={accessPage} bind:pageSize={accessPageSize} />
+    {/if}
+  </section>
+
   <section class="card danger">
     <div class="card-header">
       <span class="card-title danger-title">{$t('account.danger.title')}</span>
@@ -179,4 +274,12 @@
   .danger { border-color: rgba(255, 90, 95, 0.4); }
   .danger-title { color: var(--red); }
   .warning { color: var(--muted); font-size: var(--text-sm); line-height: 1.55; background: rgba(255, 90, 95, 0.08); border: 1px solid rgba(255, 90, 95, 0.25); border-radius: var(--radius-sm); padding: var(--space-3); }
+  .access-scroll { overflow-x: auto; }
+  .access-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+  .access-table th { text-align: left; color: var(--muted); font-weight: 600; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .access-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; }
+  .access-table tbody tr:last-child td { border-bottom: none; }
+  .access-table .nowrap { white-space: nowrap; }
+  .access-table .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
+  .new-badge { display: inline-block; margin-left: var(--space-2); padding: 1px var(--space-2); border-radius: 999px; font-size: var(--text-xs); font-weight: 700; color: #1a1714; background: var(--brand); }
 </style>

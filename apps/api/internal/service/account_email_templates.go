@@ -3,6 +3,7 @@ package service
 import (
 	"fmt"
 	"html"
+	"strings"
 
 	"coin-hub/internal/email"
 )
@@ -61,6 +62,71 @@ func emailVerificationEmail(locale string, link string) email.Message {
 			HTMLBody: brandedEmailHTML("Confirme seu e-mail", "Bem-vindo ao Coin Hub! Confirme seu endereço de e-mail para sabermos que é você mesmo. O link é válido por 24 horas.", "Confirmar e-mail", link, "Se você não criou uma conta, ignore este e-mail."),
 		}
 	}
+}
+
+// newAccessAlertEmail is the security notice sent when a new (unrecognized) device or network signs
+// in. It lists the device, IP and time so the user can judge whether the access was theirs.
+func newAccessAlertEmail(locale string, device string, ipAddress string, whenText string, accountLink string) email.Message {
+	deviceValue := valueOrDash(device)
+	ipValue := valueOrDash(ipAddress)
+	whenValue := valueOrDash(whenText)
+	switch normalizeEmailLocale(locale) {
+	case "en":
+		return email.Message{
+			Subject:  "Coin Hub — new sign-in to your account",
+			TextBody: "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.\n\nDevice: " + deviceValue + "\nIP address: " + ipValue + "\nWhen: " + whenValue + "\n\nReview your account: " + accountLink + "\n\nIf this was you, you can ignore this email. If you don't recognize it, change your password right away.",
+			HTMLBody: brandedAlertEmailHTML("New sign-in detected", "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.", [][2]string{{"Device", deviceValue}, {"IP address", ipValue}, {"When", whenValue}}, "Review your account", accountLink, "If this was you, you can ignore this email. If you don't recognize it, change your password right away."),
+		}
+	case "es":
+		return email.Message{
+			Subject:  "Coin Hub — nuevo acceso a tu cuenta",
+			TextBody: "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.\n\nDispositivo: " + deviceValue + "\nDirección IP: " + ipValue + "\nCuándo: " + whenValue + "\n\nRevisar tu cuenta: " + accountLink + "\n\nSi fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato.",
+			HTMLBody: brandedAlertEmailHTML("Nuevo acceso detectado", "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.", [][2]string{{"Dispositivo", deviceValue}, {"Dirección IP", ipValue}, {"Cuándo", whenValue}}, "Revisar tu cuenta", accountLink, "Si fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato."),
+		}
+	default:
+		return email.Message{
+			Subject:  "Coin Hub — novo acesso à sua conta",
+			TextBody: "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.\n\nDispositivo: " + deviceValue + "\nEndereço IP: " + ipValue + "\nQuando: " + whenValue + "\n\nRevisar sua conta: " + accountLink + "\n\nSe foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente.",
+			HTMLBody: brandedAlertEmailHTML("Novo acesso detectado", "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.", [][2]string{{"Dispositivo", deviceValue}, {"Endereço IP", ipValue}, {"Quando", whenValue}}, "Revisar sua conta", accountLink, "Se foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente."),
+		}
+	}
+}
+
+// valueOrDash returns an em dash for empty/blank values so the email never shows a blank field.
+func valueOrDash(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "—"
+	}
+	return value
+}
+
+// brandedAlertEmailHTML renders the security-alert email: the brand shell plus a labelled details
+// table (device / IP / when). Labels and values are HTML-escaped.
+func brandedAlertEmailHTML(heading string, intro string, details [][2]string, buttonLabel string, link string, footer string) string {
+	var detailRows strings.Builder
+	for _, detail := range details {
+		detailRows.WriteString(fmt.Sprintf(
+			`<tr><td style="font-size:13px;color:#a89f8c;padding:4px 12px 4px 0;white-space:nowrap;vertical-align:top;">%s</td><td style="font-size:13px;color:#e9e2cf;padding:4px 0;word-break:break-all;">%s</td></tr>`,
+			html.EscapeString(detail[0]), html.EscapeString(detail[1]),
+		))
+	}
+	return fmt.Sprintf(`<!doctype html>
+<html><body style="margin:0;background:#1a1714;font-family:Segoe UI,Arial,sans-serif;color:#fff9db;">
+  <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="background:#1a1714;padding:32px 0;">
+    <tr><td align="center">
+      <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="max-width:480px;background:#231f1b;border:1px solid #3a332b;border-radius:14px;padding:32px;">
+        <tr><td style="font-size:22px;font-weight:800;color:#ffd43b;padding-bottom:16px;">Coin&nbsp;Hub</td></tr>
+        <tr><td style="font-size:18px;font-weight:700;padding-bottom:12px;">%s</td></tr>
+        <tr><td style="font-size:15px;line-height:1.6;color:#e9e2cf;padding-bottom:20px;">%s</td></tr>
+        <tr><td style="padding-bottom:24px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" style="background:#1a1714;border:1px solid #3a332b;border-radius:10px;padding:12px 16px;">%s</table>
+        </td></tr>
+        <tr><td style="padding-bottom:24px;"><a href="%s" style="display:inline-block;background:#ffd43b;color:#1a1714;font-weight:800;text-decoration:none;padding:12px 22px;border-radius:10px;">%s</a></td></tr>
+        <tr><td style="font-size:13px;line-height:1.6;color:#a89f8c;">%s</td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`, html.EscapeString(heading), html.EscapeString(intro), detailRows.String(), html.EscapeString(link), html.EscapeString(buttonLabel), html.EscapeString(footer))
 }
 
 // brandedEmailHTML renders a simple, inline-styled email matching the warm-dark + gold brand. Links

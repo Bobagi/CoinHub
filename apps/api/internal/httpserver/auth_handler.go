@@ -35,6 +35,7 @@ type AuthHandler struct {
 	SessionService      *service.SessionService
 	GoogleOAuthService  *service.GoogleOAuthService // nil when Google sign-in is not configured
 	AccountEmailService *service.AccountEmailService
+	AccessLogService    *service.AccessLogService
 	CookieName          string
 	OAuthStateCookie    string
 	StepUpStateCookie   string
@@ -43,12 +44,13 @@ type AuthHandler struct {
 	loginThrottle       *loginThrottle
 }
 
-func NewAuthHandler(authService *service.AuthService, sessionService *service.SessionService, googleOAuthService *service.GoogleOAuthService, accountEmailService *service.AccountEmailService, secretCipher *security.SecretCipher, secureCookies bool) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, sessionService *service.SessionService, googleOAuthService *service.GoogleOAuthService, accountEmailService *service.AccountEmailService, accessLogService *service.AccessLogService, secretCipher *security.SecretCipher, secureCookies bool) *AuthHandler {
 	return &AuthHandler{
 		AuthService:         authService,
 		SessionService:      sessionService,
 		GoogleOAuthService:  googleOAuthService,
 		AccountEmailService: accountEmailService,
+		AccessLogService:    accessLogService,
 		CookieName:          "coin_hub_session",
 		OAuthStateCookie:    "coin_hub_oauth_state",
 		StepUpStateCookie:   "coin_hub_stepup",
@@ -56,6 +58,22 @@ func NewAuthHandler(authService *service.AuthService, sessionService *service.Se
 		SecretCipher:        secretCipher,
 		loginThrottle:       newLoginThrottle(),
 	}
+}
+
+// recordAccess logs a successful sign-in to the durable access history (and, for a new device on an
+// existing account, triggers the security-alert email). Best-effort and asynchronous.
+func (handler *AuthHandler) recordAccess(request *http.Request, user *domain.User, authMethod string) {
+	if handler.AccessLogService == nil || user == nil {
+		return
+	}
+	handler.AccessLogService.RecordLoginAsync(
+		user.Identifier,
+		user.Email,
+		clientIPAddress(request),
+		request.UserAgent(),
+		authMethod,
+		resolveRequestLocale(request, ""),
+	)
 }
 
 func (handler *AuthHandler) RegisterRoutes(router *http.ServeMux) {
@@ -124,6 +142,7 @@ func (handler *AuthHandler) handleSignup(responseWriter http.ResponseWriter, req
 		log.Printf("Could not send verification email for user %d: %v", createdUser.Identifier, sendError)
 	}
 
+	handler.recordAccess(request, createdUser, domain.AccessMethodSignup)
 	handler.issueSessionAndRespond(responseWriter, request, createdUser)
 }
 
@@ -162,6 +181,7 @@ func (handler *AuthHandler) handleLogin(responseWriter http.ResponseWriter, requ
 	}
 
 	handler.loginThrottle.RegisterSuccess(payload.Email)
+	handler.recordAccess(request, authenticatedUser, domain.AccessMethodPassword)
 	handler.issueSessionAndRespond(responseWriter, request, authenticatedUser)
 }
 
@@ -330,6 +350,7 @@ func (handler *AuthHandler) handleGoogleCallback(responseWriter http.ResponseWri
 		http.Redirect(responseWriter, request, postLoginRedirectPath+"?login_error=google", http.StatusSeeOther)
 		return
 	}
+	handler.recordAccess(request, authenticatedUser, domain.AccessMethodGoogle)
 	http.Redirect(responseWriter, request, postLoginRedirectPath, http.StatusSeeOther)
 }
 

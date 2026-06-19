@@ -39,6 +39,7 @@ func main() {
 	userPortfolioRepository := repository.NewPostgresUserPortfolioRepository(postgresConnector.Database)
 	accountDeletionAuditRepository := repository.NewPostgresAccountDeletionAuditRepository(postgresConnector.Database)
 	authTokenRepository := repository.NewPostgresAuthTokenRepository(postgresConnector.Database)
+	accountAccessEventRepository := repository.NewPostgresAccountAccessEventRepository(postgresConnector.Database)
 
 	// Encryption for Binance secrets at rest. Without a key, credential storage is refused at runtime.
 	secretCipher, secretCipherError := security.NewSecretCipher(os.Getenv("CREDENTIALS_ENCRYPTION_KEY"))
@@ -66,8 +67,9 @@ func main() {
 	}
 	emailSender := email.NewSenderFromEnv()
 	accountEmailService := service.NewAccountEmailService(userRepository, authTokenRepository, userSessionRepository, passwordService, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
-	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, secretCipher, secureSessionCookies)
-	accountHandler := httpserver.NewAccountHandler(authService, sessionService, authHandler.CookieName, secureSessionCookies)
+	accessLogService := service.NewAccessLogService(accountAccessEventRepository, accountEmailService)
+	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, accessLogService, secretCipher, secureSessionCookies)
+	accountHandler := httpserver.NewAccountHandler(authService, sessionService, accessLogService, authHandler.CookieName, secureSessionCookies)
 
 	// Per-user trading configuration and Binance credentials.
 	userCredentialService := service.NewUserCredentialService(binanceCredentialRepository, userRepository, secretCipher, testnetBaseURL, productionBaseURL)

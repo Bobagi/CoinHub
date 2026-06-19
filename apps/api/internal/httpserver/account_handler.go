@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -12,26 +13,30 @@ import (
 )
 
 // AccountHandler serves the session-protected account-management endpoints: editing the profile,
-// setting/changing the password, and permanently deleting the account.
+// setting/changing the password, permanently deleting the account, and listing the account's
+// sign-in (access) history.
 type AccountHandler struct {
-	authService    *service.AuthService
-	sessionService *service.SessionService
-	cookieName     string
-	secureCookies  bool
+	authService      *service.AuthService
+	sessionService   *service.SessionService
+	accessLogService *service.AccessLogService
+	cookieName       string
+	secureCookies    bool
 }
 
-func NewAccountHandler(authService *service.AuthService, sessionService *service.SessionService, cookieName string, secureCookies bool) *AccountHandler {
+func NewAccountHandler(authService *service.AuthService, sessionService *service.SessionService, accessLogService *service.AccessLogService, cookieName string, secureCookies bool) *AccountHandler {
 	return &AccountHandler{
-		authService:    authService,
-		sessionService: sessionService,
-		cookieName:     cookieName,
-		secureCookies:  secureCookies,
+		authService:      authService,
+		sessionService:   sessionService,
+		accessLogService: accessLogService,
+		cookieName:       cookieName,
+		secureCookies:    secureCookies,
 	}
 }
 
 func (handler *AccountHandler) RegisterRoutes(router *http.ServeMux) {
 	router.HandleFunc("/api/v1/account/profile", handler.handleProfile)
 	router.HandleFunc("/api/v1/account/password", handler.handlePassword)
+	router.HandleFunc("/api/v1/account/access", handler.handleAccessHistory)
 	router.HandleFunc("/api/v1/account", handler.handleDeleteAccount)
 }
 
@@ -117,6 +122,70 @@ func (handler *AccountHandler) handlePassword(responseWriter http.ResponseWriter
 		return
 	}
 	writeJSON(responseWriter, http.StatusOK, map[string]string{"message": "Password updated."})
+}
+
+type accessEventPayload struct {
+	Identifier  int64  `json:"id"`
+	IPAddress   string `json:"ip_address"`
+	Device      string `json:"user_agent"`
+	AuthMethod  string `json:"auth_method"`
+	IsNewDevice bool   `json:"is_new_device"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// handleAccessHistory returns a page of the account's durable sign-in history (newest first), so the
+// user can review when and from where their account was accessed.
+func (handler *AccountHandler) handleAccessHistory(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	page := parsePositiveQuery(request, "page", 1)
+	pageSize := parsePositiveQuery(request, "page_size", 10)
+	if pageSize > 50 {
+		pageSize = 50
+	}
+	offset := (page - 1) * pageSize
+
+	operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	defer cancel()
+	events, total, listError := handler.accessLogService.ListAccess(operationContext, userIdentifier, pageSize, offset)
+	if listError != nil {
+		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not load your access history.")
+		return
+	}
+
+	payload := make([]accessEventPayload, 0, len(events))
+	for _, event := range events {
+		payload = append(payload, accessEventPayload{
+			Identifier:  event.Identifier,
+			IPAddress:   event.IPAddress,
+			Device:      event.UserAgent,
+			AuthMethod:  event.AuthMethod,
+			IsNewDevice: event.IsNewDevice,
+			CreatedAt:   event.CreatedAt.Format(time.RFC3339),
+		})
+	}
+	writeJSON(responseWriter, http.StatusOK, map[string]interface{}{"events": payload, "total": total})
+}
+
+// parsePositiveQuery reads a positive integer query parameter, returning a fallback for missing or
+// invalid values.
+func parsePositiveQuery(request *http.Request, name string, fallback int) int {
+	raw := request.URL.Query().Get(name)
+	if raw == "" {
+		return fallback
+	}
+	value, parseError := strconv.Atoi(raw)
+	if parseError != nil || value < 1 {
+		return fallback
+	}
+	return value
 }
 
 func (handler *AccountHandler) handleDeleteAccount(responseWriter http.ResponseWriter, request *http.Request) {

@@ -59,6 +59,20 @@ export interface RobotsResponse {
   max_order_quote_amount: number // global per-order spending ceiling; 0 = no cap
 }
 
+export interface AccessEvent {
+  id: number
+  ip_address: string
+  user_agent: string
+  auth_method: string
+  is_new_device: boolean
+  created_at: string
+}
+
+export interface AccessHistory {
+  events: AccessEvent[]
+  total: number
+}
+
 export interface Operation {
   id: number
   symbol: string
@@ -166,6 +180,8 @@ export const api = {
     }),
   deleteAccount: (password: string) =>
     request<{ message: string }>('DELETE', '/api/v1/account', { password, confirm: true }),
+  getAccessHistory: (page: number, pageSize: number) =>
+    request<AccessHistory>('GET', `/api/v1/account/access?page=${page}&page_size=${pageSize}`),
 
   getSettings: () => request<TradingSettings>('GET', '/api/v1/settings'),
   saveSettings: (settings: TradingSettings) => request<TradingSettings>('PUT', '/api/v1/settings', settings),

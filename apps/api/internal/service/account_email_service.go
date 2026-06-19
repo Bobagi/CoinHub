@@ -128,6 +128,16 @@ func (service *AccountEmailService) ConfirmEmailVerification(operationContext co
 	return nil
 }
 
+// SendNewAccessAlert emails a security notice that a new (unrecognized) device or network signed in.
+// Best-effort and asynchronous; a no-op when email is not configured or the recipient is empty.
+func (service *AccountEmailService) SendNewAccessAlert(recipientEmail string, locale string, deviceLabel string, ipAddress string, whenText string) {
+	if strings.TrimSpace(recipientEmail) == "" {
+		return
+	}
+	accountLink := service.baseURL + "/#/account"
+	service.sendAsync(newAccessAlertEmail(locale, deviceLabel, ipAddress, whenText, accountLink), recipientEmail)
+}
+
 // sendAsync delivers the email in the background so the HTTP request never blocks on SMTP.
 func (service *AccountEmailService) sendAsync(message email.Message, recipient string) {
 	message.To = recipient
