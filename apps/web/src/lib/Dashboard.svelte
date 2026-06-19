@@ -996,7 +996,7 @@
 
   .stack-title { display: flex; flex-direction: column; }
   .switch-inline { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
-  .robot-nav-btn { display: inline-flex; margin-top: var(--space-3); }
+  .robot-nav-btn { display: inline-flex; margin-top: var(--space-3); margin-bottom: var(--space-4); }
   .robot-editor-actions { display: flex; justify-content: space-between; gap: var(--space-2); }
   .robot-list { display: flex; flex-direction: column; gap: var(--space-2); }
   .robot-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); color: var(--text); font: inherit; height: auto; }

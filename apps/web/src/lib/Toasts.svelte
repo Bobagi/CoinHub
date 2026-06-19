@@ -2,6 +2,7 @@
   import { fly, fade } from 'svelte/transition'
   import { flip } from 'svelte/animate'
   import { toasts, dismissToast, type Toast } from './stores'
+  import { t } from './i18n'
 
   const iconFor: Record<Toast['kind'], string> = { success: '✓', error: '!', info: 'i' }
 </script>
@@ -17,7 +18,7 @@
     >
       <span class="toast-icon" aria-hidden="true">{iconFor[toast.kind]}</span>
       <span class="toast-text">{toast.text}</span>
-      <button class="toast-close" aria-label="Dismiss" on:click={() => dismissToast(toast.id)}>×</button>
+      <button class="toast-close" aria-label={$t('common.dismiss')} on:click={() => dismissToast(toast.id)}>×</button>
     </div>
   {/each}
 </div>
