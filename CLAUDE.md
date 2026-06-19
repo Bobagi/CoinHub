@@ -252,6 +252,18 @@ the IP weight limit (above) bites first.
   connect-Binance-first, enable-live-trading, price-unavailable, etc. **To add a new translatable
   error: return `newUserError(code, englishMsg, params)` and add `err.<code>` to all three dicts.**
 
+### 2026-06 session (UI consistency + live P/L on positions)
+- **Sub-tab placement standardized**: the Operations card's Positions/History sub-tabs now sit on
+  their own `<div class="subtabs mt-4">` **below the card title** (like the "Positions & performance"
+  card), instead of floating to the right inside the header. Use this pattern (title, then `.subtabs`
+  below) for any new sub-tabbed card.
+- **Live "if you sold now" P/L on each open position**: the Positions row shows a green ▲ / red ▼
+  arrow with the unrealized P/L % at the current price, left of "Sell now"; hovering it shows a
+  (native `title`) tooltip with buy price, current price and the cash profit (`ops.pnlBuy/pnlNow/pnlProfit`,
+  en/pt/es). Dashboard fetches `getPrice` for the distinct open symbols into `currentPrices` —
+  reactively when the open-symbol set changes, plus a 30s refresh while the Positions sub-tab is open
+  (backend price cache is 5s). The actions column was widened (140px→200px) to fit arrow + button.
+
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
 help text. **Be precise: say what we do AND what we don't.**

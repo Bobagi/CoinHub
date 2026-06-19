@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import { api, type TradingSettings, type CredentialStatus, type Operation, type Execution, type Robot } from './api'
   import { binanceStatus, currentUser, pushToast, notifyError } from './stores'
   import { t, intlLocale, formatDateTime, formatDate, translateError } from './i18n'
@@ -197,6 +197,58 @@
     } catch {
       symbols = []
     }
+  }
+
+  // Live prices for open positions → the per-row "if you sold now" P/L arrow + tooltip in Positions.
+  let currentPrices: Record<string, number> = {}
+  let pricesTimer: ReturnType<typeof setInterval> | undefined
+  let pricedSymbolsKey = ''
+  $: openSymbolsKey = [...new Set(operations.filter((o) => o.status === 'OPEN').map((o) => o.symbol))].sort().join(',')
+  // Refetch prices whenever the set of open coins changes (a buy/sell adds or removes one).
+  $: if (openSymbolsKey !== pricedSymbolsKey) {
+    pricedSymbolsKey = openSymbolsKey
+    loadPositionPrices()
+  }
+
+  async function loadPositionPrices() {
+    const symbols = [...new Set(operations.filter((o) => o.status === 'OPEN').map((o) => o.symbol))]
+    if (symbols.length === 0) {
+      currentPrices = {}
+      return
+    }
+    const entries = await Promise.all(
+      symbols.map(async (symbol) => {
+        try {
+          return [symbol, (await api.getPrice(symbol)).price] as const
+        } catch {
+          return [symbol, currentPrices[symbol] || 0] as const
+        }
+      })
+    )
+    currentPrices = Object.fromEntries(entries)
+  }
+
+  // Unrealized P/L of an open position at the current price.
+  function pnlPct(operation: Operation): number {
+    const current = currentPrices[operation.symbol] || 0
+    if (!current || !operation.purchase_price_per_unit) return 0
+    return ((current - operation.purchase_price_per_unit) / operation.purchase_price_per_unit) * 100
+  }
+  function pnlValue(operation: Operation): number {
+    const current = currentPrices[operation.symbol] || 0
+    if (!current) return 0
+    return (current - operation.purchase_price_per_unit) * operation.quantity
+  }
+  function pnlTooltip(operation: Operation): string {
+    const current = currentPrices[operation.symbol] || 0
+    return [
+      $t('ops.pnlBuy', { price: fmt(operation.purchase_price_per_unit) }),
+      $t('ops.pnlNow', { price: fmt(current) }),
+      $t('ops.pnlProfit', {
+        value: (pnlValue(operation) >= 0 ? '+' : '') + fmt(pnlValue(operation)),
+        pct: (pnlPct(operation) >= 0 ? '+' : '') + pnlPct(operation).toFixed(2) + '%'
+      })
+    ].join('\n')
   }
 
   async function saveCredentials() {
@@ -491,6 +543,14 @@
     loadSymbols()
     loadExecutions()
     loadRobots()
+    // Keep the Positions P/L arrows fresh while that sub-tab is open (backend caches prices for 5s).
+    pricesTimer = setInterval(() => {
+      if (opsView === 'positions') loadPositionPrices()
+    }, 30000)
+  })
+
+  onDestroy(() => {
+    if (pricesTimer) clearInterval(pricesTimer)
   })
 </script>
 
@@ -829,12 +889,12 @@
     </details>
 
     <section class="card">
-      <div class="card-header ops-header">
+      <div class="card-header">
         <span class="card-title">{$t('ops.title')}</span>
-        <div class="subtabs">
-          <button class="subtab" class:active={opsView === 'positions'} on:click={() => (opsView = 'positions')}>{$t('ops.tabPositions')}</button>
-          <button class="subtab" class:active={opsView === 'history'} on:click={() => (opsView = 'history')}>{$t('ops.tabHistory')}</button>
-        </div>
+      </div>
+      <div class="subtabs mt-4">
+        <button class="subtab" class:active={opsView === 'positions'} on:click={() => (opsView = 'positions')}>{$t('ops.tabPositions')}</button>
+        <button class="subtab" class:active={opsView === 'history'} on:click={() => (opsView = 'history')}>{$t('ops.tabHistory')}</button>
       </div>
 
       {#if opsView === 'positions'}
@@ -889,9 +949,16 @@
                         {placeSellBusyId === operation.id ? $t('ops.retrying') : $t('ops.retrySell')}
                       </button>
                     {/if}
-                    <button class="danger btn-sm" disabled={sellBusyId === operation.id} on:click={() => sellNow(operation.id)}>
-                      {sellBusyId === operation.id ? $t('ops.selling') : $t('ops.sellNow')}
-                    </button>
+                    <div class="sell-row">
+                      {#if currentPrices[operation.symbol]}
+                        <span class="pnl-arrow {pnlPct(operation) >= 0 ? 'pos' : 'neg'}" title={pnlTooltip(operation)} aria-label={pnlTooltip(operation)}>
+                          <span class="pnl-caret">{pnlPct(operation) >= 0 ? '▲' : '▼'}</span>{pnlPct(operation) >= 0 ? '+' : ''}{pnlPct(operation).toFixed(2)}%
+                        </span>
+                      {/if}
+                      <button class="danger btn-sm" disabled={sellBusyId === operation.id} on:click={() => sellNow(operation.id)}>
+                        {sellBusyId === operation.id ? $t('ops.selling') : $t('ops.sellNow')}
+                      </button>
+                    </div>
                   {:else}
                     <span class="muted">—</span>
                   {/if}
@@ -1037,12 +1104,17 @@
   .subtab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
 
   .table { display: flex; flex-direction: column; overflow-x: auto; }
-  .trow { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.3fr 1.4fr 140px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 960px; }
+  .trow { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.3fr 1.4fr 200px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 1020px; }
   .trow .gold { color: var(--brand); font-weight: 700; }
   .hrow { display: grid; grid-template-columns: 150px 0.9fr 0.8fr 0.9fr 1fr 0.9fr 1fr 70px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 760px; }
   .thead { color: var(--muted); font-weight: 700; font-size: var(--text-xs); }
   .col-actions { text-align: right; }
   .ops-actions { display: flex; flex-direction: column; gap: var(--space-1); align-items: flex-end; }
+  .sell-row { display: flex; align-items: center; gap: var(--space-2); }
+  .pnl-arrow { display: inline-flex; align-items: center; gap: 2px; font-size: var(--text-xs); font-weight: 700; white-space: nowrap; cursor: help; }
+  .pnl-arrow.pos { color: var(--green); }
+  .pnl-arrow.neg { color: var(--red); }
+  .pnl-caret { font-size: 0.7em; }
   .sell-cell { display: flex; align-items: center; gap: var(--space-2); }
   .sell-cell .gtc { font-size: var(--text-xs); }
   .by-badge { padding: 2px var(--space-2); border-radius: var(--radius-pill); font-weight: 700; font-size: var(--text-xs); white-space: nowrap; }
