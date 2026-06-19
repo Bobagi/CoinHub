@@ -85,6 +85,10 @@ cd apps/web && pnpm build                        # rebuild the SPA nginx serves
 - **`CREDENTIALS_ENCRYPTION_KEY` must stay stable** — regenerating it makes stored Binance secrets
   undecryptable. Never print/commit `.env`.
 - `apps/api` runs on **distroless** (no shell): debug via `docker logs coin-hub-api-1`, not `exec`.
+- **GeoIP DB (access-log geolocation):** provision `/opt/geoip/GeoLite2-City.mmdb` on the host (it's
+  bind-mounted read-only into the api container; **not committed** — licensed + ~57MB). Get it from the
+  Umami container: `docker cp $(docker ps -qf name=^umami$):/app/geo/GeoLite2-City.mmdb /opt/geoip/`.
+  Missing ⇒ geolocation silently off (the app still runs). Refresh periodically to keep it accurate.
 
 ## Conventions
 - Descriptive English identifiers (functions/vars), even when chatting in PT.
@@ -279,10 +283,22 @@ the IP weight limit (above) bites first.
   `newAccessAlertEmail` (en/pt/es, branded details table device/IP/when, links to `/#/account`). Read
   errors fail safe (treated as a known device, no false alert).
 - **UI**: an "Access history" card in `AccountSettings.svelte` (server-paged via the shared
-  `Pagination.svelte`, `GET /api/v1/account/access?page&page_size`) — columns When / Device / IP /
-  Method, a "New device" badge, friendly `deviceLabel()` from the UA (full UA in `title`). i18n
-  `account.access.*` (en/pt/es). **The email alert only fires when SMTP is configured** (`Sender`
+  `Pagination.svelte`, `GET /api/v1/account/access?page&page_size`) — columns When / Location / Device /
+  IP / Method, a "New device" badge, friendly `deviceLabel()` from the UA (full UA in `title`), plus a
+  muted note that the IP/location are the connection's **public** address (not the device's LAN IP).
+  i18n `account.access.*` (en/pt/es). **The email alert only fires when SMTP is configured** (`Sender`
   no-op otherwise); recording + the history list work regardless.
+- **IP→city geolocation** (migration 0025 adds `country_code/country_name/region/city`): resolved at
+  record time, **offline**, from a local MaxMind **GeoLite2-City** DB via `internal/geoip`
+  (`github.com/oschwald/geoip2-golang`, the first 3rd-party Go dep besides lib/pq + x/crypto). Localized
+  place names follow the access locale (en/pt-BR/es). The DB is **host-provisioned, not committed**
+  (licensed + ~57MB): it lives at `/opt/geoip/GeoLite2-City.mmdb`, mounted read-only into the api
+  container at `/app/geo/GeoLite2-City.mmdb` with `GEOIP_CITY_DB` pointing at it (see docker-compose).
+  Sourced by copying Umami's bundled copy (`docker cp umami:/app/geo/GeoLite2-City.mmdb`). Missing/unset
+  ⇒ `geoip.Open` returns a no-op locator and locations are simply blank — the rest still works. The
+  alert email also includes the resolved location. **NOTE the recorded IP is the real client public IP**
+  (nginx already forwards `X-Forwarded-For`; `clientIPAddress` reads it) — e.g. the operator IP
+  `138.99.206.150` → Serra Negra/São Paulo/BR — not the VPS or a LAN address.
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add

@@ -66,28 +66,29 @@ func emailVerificationEmail(locale string, link string) email.Message {
 
 // newAccessAlertEmail is the security notice sent when a new (unrecognized) device or network signs
 // in. It lists the device, IP and time so the user can judge whether the access was theirs.
-func newAccessAlertEmail(locale string, device string, ipAddress string, whenText string, accountLink string) email.Message {
+func newAccessAlertEmail(locale string, device string, ipAddress string, location string, whenText string, accountLink string) email.Message {
 	deviceValue := valueOrDash(device)
 	ipValue := valueOrDash(ipAddress)
+	locationValue := valueOrDash(location)
 	whenValue := valueOrDash(whenText)
 	switch normalizeEmailLocale(locale) {
 	case "en":
 		return email.Message{
 			Subject:  "Coin Hub — new sign-in to your account",
-			TextBody: "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.\n\nDevice: " + deviceValue + "\nIP address: " + ipValue + "\nWhen: " + whenValue + "\n\nReview your account: " + accountLink + "\n\nIf this was you, you can ignore this email. If you don't recognize it, change your password right away.",
-			HTMLBody: brandedAlertEmailHTML("New sign-in detected", "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.", [][2]string{{"Device", deviceValue}, {"IP address", ipValue}, {"When", whenValue}}, "Review your account", accountLink, "If this was you, you can ignore this email. If you don't recognize it, change your password right away."),
+			TextBody: "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.\n\nDevice: " + deviceValue + "\nLocation: " + locationValue + "\nIP address: " + ipValue + "\nWhen: " + whenValue + "\n\nReview your account: " + accountLink + "\n\nIf this was you, you can ignore this email. If you don't recognize it, change your password right away.",
+			HTMLBody: brandedAlertEmailHTML("New sign-in detected", "We noticed a sign-in to your Coin Hub account from a device or network we hadn't seen before.", [][2]string{{"Device", deviceValue}, {"Location", locationValue}, {"IP address", ipValue}, {"When", whenValue}}, "Review your account", accountLink, "If this was you, you can ignore this email. If you don't recognize it, change your password right away."),
 		}
 	case "es":
 		return email.Message{
 			Subject:  "Coin Hub — nuevo acceso a tu cuenta",
-			TextBody: "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.\n\nDispositivo: " + deviceValue + "\nDirección IP: " + ipValue + "\nCuándo: " + whenValue + "\n\nRevisar tu cuenta: " + accountLink + "\n\nSi fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato.",
-			HTMLBody: brandedAlertEmailHTML("Nuevo acceso detectado", "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.", [][2]string{{"Dispositivo", deviceValue}, {"Dirección IP", ipValue}, {"Cuándo", whenValue}}, "Revisar tu cuenta", accountLink, "Si fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato."),
+			TextBody: "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.\n\nDispositivo: " + deviceValue + "\nUbicación: " + locationValue + "\nDirección IP: " + ipValue + "\nCuándo: " + whenValue + "\n\nRevisar tu cuenta: " + accountLink + "\n\nSi fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato.",
+			HTMLBody: brandedAlertEmailHTML("Nuevo acceso detectado", "Detectamos un acceso a tu cuenta de Coin Hub desde un dispositivo o red que no habíamos visto antes.", [][2]string{{"Dispositivo", deviceValue}, {"Ubicación", locationValue}, {"Dirección IP", ipValue}, {"Cuándo", whenValue}}, "Revisar tu cuenta", accountLink, "Si fuiste tú, puedes ignorar este correo. Si no reconoces este acceso, cambia tu contraseña de inmediato."),
 		}
 	default:
 		return email.Message{
 			Subject:  "Coin Hub — novo acesso à sua conta",
-			TextBody: "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.\n\nDispositivo: " + deviceValue + "\nEndereço IP: " + ipValue + "\nQuando: " + whenValue + "\n\nRevisar sua conta: " + accountLink + "\n\nSe foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente.",
-			HTMLBody: brandedAlertEmailHTML("Novo acesso detectado", "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.", [][2]string{{"Dispositivo", deviceValue}, {"Endereço IP", ipValue}, {"Quando", whenValue}}, "Revisar sua conta", accountLink, "Se foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente."),
+			TextBody: "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.\n\nDispositivo: " + deviceValue + "\nLocal: " + locationValue + "\nEndereço IP: " + ipValue + "\nQuando: " + whenValue + "\n\nRevisar sua conta: " + accountLink + "\n\nSe foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente.",
+			HTMLBody: brandedAlertEmailHTML("Novo acesso detectado", "Detectamos um acesso à sua conta Coin Hub a partir de um dispositivo ou rede que ainda não conhecíamos.", [][2]string{{"Dispositivo", deviceValue}, {"Local", locationValue}, {"Endereço IP", ipValue}, {"Quando", whenValue}}, "Revisar sua conta", accountLink, "Se foi você, pode ignorar este e-mail. Se não reconhece este acesso, troque sua senha imediatamente."),
 		}
 	}
 }

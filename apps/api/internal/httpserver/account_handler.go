@@ -130,6 +130,10 @@ type accessEventPayload struct {
 	Device      string `json:"user_agent"`
 	AuthMethod  string `json:"auth_method"`
 	IsNewDevice bool   `json:"is_new_device"`
+	CountryCode string `json:"country_code"`
+	CountryName string `json:"country_name"`
+	Region      string `json:"region"`
+	City        string `json:"city"`
 	CreatedAt   string `json:"created_at"`
 }
 
@@ -168,6 +172,10 @@ func (handler *AccountHandler) handleAccessHistory(responseWriter http.ResponseW
 			Device:      event.UserAgent,
 			AuthMethod:  event.AuthMethod,
 			IsNewDevice: event.IsNewDevice,
+			CountryCode: event.CountryCode,
+			CountryName: event.CountryName,
+			Region:      event.Region,
+			City:        event.City,
 			CreatedAt:   event.CreatedAt.Format(time.RFC3339),
 		})
 	}

@@ -30,14 +30,19 @@ func NewPostgresAccountAccessEventRepository(database *sql.DB) *PostgresAccountA
 func (repository *PostgresAccountAccessEventRepository) RecordEvent(operationContext context.Context, event domain.AccountAccessEvent) error {
 	_, executionError := repository.Database.ExecContext(
 		operationContext,
-		`INSERT INTO account_access_events (user_id, ip_address, user_agent, auth_method, device_fingerprint, is_new_device)
-		 VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4, $5, $6)`,
+		`INSERT INTO account_access_events
+		     (user_id, ip_address, user_agent, auth_method, device_fingerprint, is_new_device, country_code, country_name, region, city)
+		 VALUES ($1, NULLIF($2, ''), NULLIF($3, ''), $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), NULLIF($9, ''), NULLIF($10, ''))`,
 		event.UserIdentifier,
 		event.IPAddress,
 		event.UserAgent,
 		event.AuthMethod,
 		event.DeviceFingerprint,
 		event.IsNewDevice,
+		event.CountryCode,
+		event.CountryName,
+		event.Region,
+		event.City,
 	)
 	return executionError
 }
@@ -69,7 +74,8 @@ func (repository *PostgresAccountAccessEventRepository) CountForUser(operationCo
 func (repository *PostgresAccountAccessEventRepository) ListForUser(operationContext context.Context, userIdentifier int64, limit int, offset int) ([]domain.AccountAccessEvent, error) {
 	rows, queryError := repository.Database.QueryContext(
 		operationContext,
-		`SELECT id, user_id, COALESCE(ip_address, ''), COALESCE(user_agent, ''), auth_method, device_fingerprint, is_new_device, created_at
+		`SELECT id, user_id, COALESCE(ip_address, ''), COALESCE(user_agent, ''), auth_method, device_fingerprint, is_new_device,
+		        COALESCE(country_code, ''), COALESCE(country_name, ''), COALESCE(region, ''), COALESCE(city, ''), created_at
 		 FROM account_access_events
 		 WHERE user_id = $1
 		 ORDER BY created_at DESC, id DESC
@@ -94,6 +100,10 @@ func (repository *PostgresAccountAccessEventRepository) ListForUser(operationCon
 			&event.AuthMethod,
 			&event.DeviceFingerprint,
 			&event.IsNewDevice,
+			&event.CountryCode,
+			&event.CountryName,
+			&event.Region,
+			&event.City,
 			&event.CreatedAt,
 		)
 		if scanError != nil {

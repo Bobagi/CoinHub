@@ -53,6 +53,12 @@
     return parts.length ? parts.join(' · ') : userAgent
   }
 
+  // "City, Region, Country" from the resolved geo fields (dropping empty parts); '—' when unknown.
+  function locationLabel(event: AccessEvent): string {
+    const parts = [event.city, event.region, event.country_name].filter((part) => part && part.trim())
+    return parts.length ? parts.join(', ') : '—'
+  }
+
   function methodLabel(method: string): string {
     switch (method) {
       case 'PASSWORD': return $t('account.access.methodPassword')
@@ -219,6 +225,7 @@
           <thead>
             <tr>
               <th>{$t('account.access.when')}</th>
+              <th>{$t('account.access.location')}</th>
               <th>{$t('account.access.device')}</th>
               <th>{$t('account.access.ip')}</th>
               <th>{$t('account.access.method')}</th>
@@ -228,6 +235,7 @@
             {#each accessEvents as event (event.id)}
               <tr>
                 <td class="nowrap">{formatAccessTime(event.created_at)}</td>
+                <td>{locationLabel(event)}</td>
                 <td>
                   <span title={event.user_agent || ''}>{deviceLabel(event.user_agent)}</span>
                   {#if event.is_new_device}<span class="new-badge">{$t('account.access.new')}</span>{/if}
@@ -240,6 +248,7 @@
         </table>
       </div>
       <Pagination total={accessTotal} bind:page={accessPage} bind:pageSize={accessPageSize} />
+      <p class="muted mt-2">{$t('account.access.ipNote')}</p>
     {/if}
   </section>
 

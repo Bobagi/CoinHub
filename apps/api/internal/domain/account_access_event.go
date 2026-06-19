@@ -20,5 +20,10 @@ type AccountAccessEvent struct {
 	AuthMethod        string
 	DeviceFingerprint string
 	IsNewDevice       bool
-	CreatedAt         time.Time
+	// Coarse geolocation resolved from IPAddress at record time (may be empty when unknown).
+	CountryCode string
+	CountryName string
+	Region      string
+	City        string
+	CreatedAt   time.Time
 }

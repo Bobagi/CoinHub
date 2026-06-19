@@ -13,6 +13,7 @@ import (
 	"coin-hub/internal/config"
 	"coin-hub/internal/database"
 	"coin-hub/internal/email"
+	"coin-hub/internal/geoip"
 	"coin-hub/internal/httpserver"
 	"coin-hub/internal/repository"
 	"coin-hub/internal/security"
@@ -67,7 +68,10 @@ func main() {
 	}
 	emailSender := email.NewSenderFromEnv()
 	accountEmailService := service.NewAccountEmailService(userRepository, authTokenRepository, userSessionRepository, passwordService, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
-	accessLogService := service.NewAccessLogService(accountAccessEventRepository, accountEmailService)
+	// IP→city geolocation for the access log (offline, optional). No database ⇒ a no-op locator.
+	geoLocator := geoip.Open(os.Getenv("GEOIP_CITY_DB"))
+	defer geoLocator.Close()
+	accessLogService := service.NewAccessLogService(accountAccessEventRepository, accountEmailService, geoLocator)
 	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, accessLogService, secretCipher, secureSessionCookies)
 	accountHandler := httpserver.NewAccountHandler(authService, sessionService, accessLogService, authHandler.CookieName, secureSessionCookies)
 

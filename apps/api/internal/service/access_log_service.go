@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"coin-hub/internal/domain"
+	"coin-hub/internal/geoip"
 	"coin-hub/internal/repository"
 )
 
@@ -18,10 +19,11 @@ import (
 type AccessLogService struct {
 	accessRepository repository.AccountAccessEventRepository
 	emailService     *AccountEmailService
+	geoLocator       *geoip.Locator
 }
 
-func NewAccessLogService(accessRepository repository.AccountAccessEventRepository, emailService *AccountEmailService) *AccessLogService {
-	return &AccessLogService{accessRepository: accessRepository, emailService: emailService}
+func NewAccessLogService(accessRepository repository.AccountAccessEventRepository, emailService *AccountEmailService, geoLocator *geoip.Locator) *AccessLogService {
+	return &AccessLogService{accessRepository: accessRepository, emailService: emailService, geoLocator: geoLocator}
 }
 
 // RecordLoginAsync records a successful sign-in in the background. It returns immediately; the actual
@@ -51,6 +53,8 @@ func (service *AccessLogService) recordLogin(userIdentifier int64, recipientEmai
 		log.Printf("access log: could not count prior accesses for user %d: %v", userIdentifier, countError)
 	}
 
+	location := service.geoLocator.Lookup(ipAddress, geoip.LanguageKey(locale))
+
 	isNewDevice := !seen
 	event := domain.AccountAccessEvent{
 		UserIdentifier:    userIdentifier,
@@ -59,6 +63,10 @@ func (service *AccessLogService) recordLogin(userIdentifier int64, recipientEmai
 		AuthMethod:        authMethod,
 		DeviceFingerprint: fingerprint,
 		IsNewDevice:       isNewDevice,
+		CountryCode:       location.CountryCode,
+		CountryName:       location.CountryName,
+		Region:            location.Region,
+		City:              location.City,
 	}
 	if recordError := service.accessRepository.RecordEvent(operationContext, event); recordError != nil {
 		log.Printf("access log: could not record access for user %d: %v", userIdentifier, recordError)
@@ -69,8 +77,20 @@ func (service *AccessLogService) recordLogin(userIdentifier int64, recipientEmai
 	// very first sign-in (and the sign-up) never alerts, but any later unrecognized device does.
 	if isNewDevice && priorCount > 0 && service.emailService != nil {
 		whenText := time.Now().UTC().Format("2006-01-02 15:04 UTC")
-		service.emailService.SendNewAccessAlert(recipientEmail, locale, userAgent, ipAddress, whenText)
+		service.emailService.SendNewAccessAlert(recipientEmail, locale, userAgent, ipAddress, formatLocation(location), whenText)
 	}
+}
+
+// formatLocation renders a location as "City, Region, Country" (dropping empty parts), for the alert
+// email. Returns an empty string when nothing is known.
+func formatLocation(location geoip.Location) string {
+	parts := make([]string, 0, 3)
+	for _, part := range []string{location.City, location.Region, location.CountryName} {
+		if strings.TrimSpace(part) != "" {
+			parts = append(parts, part)
+		}
+	}
+	return strings.Join(parts, ", ")
 }
 
 // ListAccess returns a page of the user's access history (newest first) plus the total count.

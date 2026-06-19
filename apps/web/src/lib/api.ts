@@ -65,6 +65,10 @@ export interface AccessEvent {
   user_agent: string
   auth_method: string
   is_new_device: boolean
+  country_code: string
+  country_name: string
+  region: string
+  city: string
   created_at: string
 }
 
