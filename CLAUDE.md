@@ -299,6 +299,15 @@ the IP weight limit (above) bites first.
   alert email also includes the resolved location. **NOTE the recorded IP is the real client public IP**
   (nginx already forwards `X-Forwarded-For`; `clientIPAddress` reads it) — e.g. the operator IP
   `138.99.206.150` → Serra Negra/São Paulo/BR — not the VPS or a LAN address.
+- **Country flags (always shown for a country) + wider table:** `CountryFlag.svelte` renders
+  `/flags/<iso2>.svg`, copied from the `flag-icons` package into `dist/flags/` by
+  `apps/web/scripts/copy-flags.mjs` (wired into the `build` script: `vite build && node …`). Served
+  **same-origin** on purpose — the vhost CSP is `img-src 'self' data:`, which blocks external flag CDNs,
+  and local SVGs (unlike emoji flags) render on Windows. Missing flag ⇒ the `<img>` `on:error` hides it.
+  The access-history card is widened (`.card.access-card` max-width 920px vs the 640px form cards) and
+  its table cells are `white-space:nowrap` (use the width, scroll-x only if needed) — the previous
+  default-`.card` width made the Location column wrap badly. **Standing rule: whenever the UI shows a
+  country/language, include its flag (local SVG, never emoji).** See `Flag.svelte` (languages pt/en/es).
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add

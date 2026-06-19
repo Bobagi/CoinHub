@@ -4,6 +4,7 @@
   import { t, intlLocale } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
   import Pagination from './Pagination.svelte'
+  import CountryFlag from './CountryFlag.svelte'
 
   let accessEvents: AccessEvent[] = []
   let accessTotal = 0
@@ -212,7 +213,7 @@
     <LanguageDropdown />
   </section>
 
-  <section class="card">
+  <section class="card access-card">
     <div class="card-header">
       <span class="card-title">{$t('account.access.title')}</span>
       <span class="card-subtitle">{$t('account.access.subtitle')}</span>
@@ -234,14 +235,19 @@
           <tbody>
             {#each accessEvents as event (event.id)}
               <tr>
-                <td class="nowrap">{formatAccessTime(event.created_at)}</td>
-                <td>{locationLabel(event)}</td>
+                <td>{formatAccessTime(event.created_at)}</td>
+                <td>
+                  <span class="loc">
+                    {#if event.country_code}<CountryFlag code={event.country_code} />{/if}
+                    <span>{locationLabel(event)}</span>
+                  </span>
+                </td>
                 <td>
                   <span title={event.user_agent || ''}>{deviceLabel(event.user_agent)}</span>
                   {#if event.is_new_device}<span class="new-badge">{$t('account.access.new')}</span>{/if}
                 </td>
-                <td class="nowrap mono">{event.ip_address || '—'}</td>
-                <td class="nowrap">{methodLabel(event.auth_method)}</td>
+                <td class="mono">{event.ip_address || '—'}</td>
+                <td>{methodLabel(event.auth_method)}</td>
               </tr>
             {/each}
           </tbody>
@@ -283,12 +289,16 @@
   .danger { border-color: rgba(255, 90, 95, 0.4); }
   .danger-title { color: var(--red); }
   .warning { color: var(--muted); font-size: var(--text-sm); line-height: 1.55; background: rgba(255, 90, 95, 0.08); border: 1px solid rgba(255, 90, 95, 0.25); border-radius: var(--radius-sm); padding: var(--space-3); }
+  /* The access log is a wide table, so it gets more room than the 640px form cards. */
+  .card.access-card { max-width: 920px; }
   .access-scroll { overflow-x: auto; }
   .access-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
-  .access-table th { text-align: left; color: var(--muted); font-weight: 600; padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); white-space: nowrap; }
-  .access-table td { padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border); vertical-align: top; }
+  /* Cells don't wrap — they use the available width (the card scrolls horizontally only if needed). */
+  .access-table th, .access-table td { white-space: nowrap; padding: var(--space-3); border-bottom: 1px solid var(--border); text-align: left; }
+  .access-table th { color: var(--muted); font-weight: 600; }
+  .access-table td { vertical-align: middle; }
   .access-table tbody tr:last-child td { border-bottom: none; }
-  .access-table .nowrap { white-space: nowrap; }
   .access-table .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, monospace; }
-  .new-badge { display: inline-block; margin-left: var(--space-2); padding: 1px var(--space-2); border-radius: 999px; font-size: var(--text-xs); font-weight: 700; color: #1a1714; background: var(--brand); }
+  .loc { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .new-badge { display: inline-block; margin-left: var(--space-2); padding: 1px var(--space-2); border-radius: 999px; font-size: var(--text-xs); font-weight: 700; white-space: nowrap; color: #1a1714; background: var(--brand); }
 </style>

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/copy-flags.mjs",
     "preview": "vite preview --host --port 3000",
     "check": "svelte-check --tsconfig ./tsconfig.json"
   },
@@ -19,9 +19,12 @@
     "vite": "^5.4.8"
   },
   "dependencies": {
-    "chart.js": "^4.4.4"
+    "chart.js": "^4.4.4",
+    "flag-icons": "^7.5.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   }
 }
