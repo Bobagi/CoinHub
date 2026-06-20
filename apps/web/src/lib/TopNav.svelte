@@ -103,8 +103,8 @@
   .binance .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--muted); }
   .binance .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(43, 214, 106, 0.18); }
   .account { position: relative; }
-  .trigger { gap: var(--space-2); }
-  .avatar { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: 0.72rem; font-weight: 800; }
+  .trigger { gap: var(--space-2); padding-inline: 5px; }
+  .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: 0.85rem; font-weight: 800; }
   .avatar-img { object-fit: cover; padding: 0; border: 1px solid var(--border); background: var(--surface-2); }
   .who { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .caret { font-size: 0.7em; transition: transform 0.15s ease; }
