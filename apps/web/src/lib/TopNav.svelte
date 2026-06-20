@@ -68,10 +68,11 @@
       class="ghost trigger"
       aria-haspopup="menu"
       aria-expanded={open}
+      aria-label={displayName || $t('nav.account')}
       on:click|stopPropagation={() => (open = !open)}
     >
       {#if avatarUrl && !avatarFailed}
-        <img class="avatar avatar-img" src={avatarUrl} alt="" on:error={() => (avatarFailed = true)} />
+        <img class="avatar avatar-img" src={avatarUrl} alt="" aria-hidden="true" on:error={() => (avatarFailed = true)} />
       {:else}
         <span class="avatar">{(displayName[0] || '?').toUpperCase()}</span>
       {/if}
@@ -104,7 +105,7 @@
   .binance .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(43, 214, 106, 0.18); }
   .account { position: relative; }
   .trigger { gap: var(--space-2); padding-inline: 5px; }
-  .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: 0.85rem; font-weight: 800; }
+  .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: var(--text-sm); font-weight: 800; }
   .avatar-img { object-fit: cover; padding: 0; border: 1px solid var(--border); background: var(--surface-2); }
   .who { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .caret { font-size: 0.7em; transition: transform 0.15s ease; }

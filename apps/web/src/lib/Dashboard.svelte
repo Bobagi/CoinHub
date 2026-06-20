@@ -922,7 +922,7 @@
         {#if visiblePositions.length === 0}
           <p class="muted mt-3">{$t('ops.none')}</p>
         {:else}
-          <div class="table mt-3">
+          <div class="table positions-table mt-3">
             <div class="trow thead">
               <div>{$t('ops.pair')}</div>
               <div>{$t('ops.status')}</div>
@@ -936,13 +936,13 @@
             </div>
             {#each pagedPositions as operation (operation.id)}
               <div class="trow">
-                <div>{operation.symbol}</div>
-                <div><span class="badge {operation.status === 'SOLD' ? 'green' : 'amber'}">{operation.status}</span></div>
-                <div>{fmt(operation.quantity)}</div>
-                <div>{fmt(operation.purchase_price_per_unit)}</div>
-                <div>{fmt(operation.sell_target_price_per_unit)}</div>
-                <div class="gold">+{fmt(operation.target_profit_percent)}%</div>
-                <div class="sell-cell">
+                <div class="pair-cell" data-label={$t('ops.pair')}>{operation.symbol}</div>
+                <div data-label={$t('ops.status')}><span class="badge {operation.status === 'SOLD' ? 'green' : 'amber'}">{operation.status}</span></div>
+                <div data-label={$t('ops.qty')}>{fmt(operation.quantity)}</div>
+                <div data-label={$t('ops.buyPrice')}>{fmt(operation.purchase_price_per_unit)}</div>
+                <div data-label={$t('ops.target')}>{fmt(operation.sell_target_price_per_unit)}</div>
+                <div class="gold" data-label={$t('ops.targetPct')}>+{fmt(operation.target_profit_percent)}%</div>
+                <div class="sell-cell" data-label={$t('ops.sellOrder')}>
                   {#if operation.sell_order_id}
                     <span class="badge green" title={$t('ops.gtcHelp')}>✓</span>
                     {#if operation.sell_order_expires_at}
@@ -956,8 +956,8 @@
                     <span class="muted">—</span>
                   {/if}
                 </div>
-                <div class="muted">{$formatDateTime(operation.purchased_at)}</div>
-                <div class="col-actions ops-actions">
+                <div class="muted" data-label={$t('ops.purchased')}>{$formatDateTime(operation.purchased_at)}</div>
+                <div class="col-actions ops-actions" data-label={$t('ops.actions')}>
                   {#if operation.status === 'OPEN'}
                     {#if !operation.sell_order_id}
                       <button class="btn-sm" disabled={placeSellBusyId === operation.id} on:click={() => placeSell(operation.id)}>
@@ -1137,4 +1137,27 @@
   .by-badge { padding: 2px var(--space-2); border-radius: var(--radius-pill); font-weight: 700; font-size: var(--text-xs); white-space: nowrap; }
   .by-badge.bot { background: rgba(151, 117, 250, 0.18); color: #b197fc; }
   .by-badge.user { background: rgba(77, 171, 247, 0.18); color: #74c0fc; }
+
+  /* Positions table reflows to stacked label/value cards on phones — a 9-column grid is unusable in a
+     ~390px side-scroll (it hides the P/L and the Sell action off-screen). Desktop is unchanged. */
+  @media (max-width: 600px) {
+    .positions-table .thead { display: none; }
+    .positions-table .trow {
+      grid-template-columns: 1fr; min-width: 0; gap: var(--space-1);
+      padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md);
+      margin-bottom: var(--space-2);
+    }
+    .positions-table .trow > div:not(.ops-actions) {
+      display: flex; justify-content: space-between; align-items: center; gap: var(--space-3);
+    }
+    .positions-table .trow > div:not(.ops-actions)::before {
+      content: attr(data-label); color: var(--muted); font-size: var(--text-xs); font-weight: 700; flex: none;
+    }
+    .positions-table .pair-cell { font-weight: 800; font-size: var(--text-md); }
+    .positions-table .ops-actions { align-items: stretch; text-align: left; margin-top: var(--space-1); }
+    .positions-table .ops-actions::before {
+      content: attr(data-label); color: var(--muted); font-size: var(--text-xs); font-weight: 700;
+    }
+    .positions-table .sell-row { justify-content: flex-end; }
+  }
 </style>

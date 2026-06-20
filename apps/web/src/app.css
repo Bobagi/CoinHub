@@ -88,7 +88,10 @@ a:hover { text-decoration: underline; }
 .row-wrap { flex-wrap: wrap; }
 .spacer { flex: 1 1 auto; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); }
-@media (max-width: 560px) { .grid-2 { grid-template-columns: 1fr; } }
+/* Shared responsive breakpoints — keep to this small set (phone 600px, tablet 768px) across the app
+   instead of ad-hoc per-component widths. (CSS can't use a var() inside @media, so the value is
+   repeated; the set itself is the contract.) */
+@media (max-width: 600px) { .grid-2 { grid-template-columns: 1fr; } }
 .mt-2 { margin-top: var(--space-2); }
 .mt-3 { margin-top: var(--space-3); }
 .mt-4 { margin-top: var(--space-4); }

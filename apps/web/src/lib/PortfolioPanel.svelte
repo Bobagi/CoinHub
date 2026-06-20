@@ -121,10 +121,10 @@
 </section>
 
 <style>
-  .actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-  h3 { margin: 16px 0 6px; }
+  .actions { display: flex; gap: var(--space-2); margin-top: var(--space-3); flex-wrap: wrap; }
+  h3 { margin: var(--space-4) 0 var(--space-2); }
   .ptable { display: flex; flex-direction: column; overflow-x: auto; }
-  .prow { display: flex; gap: 10px; padding: 6px 4px; border-bottom: 1px solid var(--border); }
-  .prow > div { flex: 1; min-width: 90px; font-size: 0.85em; white-space: nowrap; }
+  .prow { display: flex; gap: var(--space-2); padding: var(--space-2) var(--space-1); border-bottom: 1px solid var(--border); }
+  .prow > div { flex: 1; min-width: 90px; font-size: var(--text-sm); white-space: nowrap; }
   .phead { color: var(--muted); font-weight: 700; }
 </style>

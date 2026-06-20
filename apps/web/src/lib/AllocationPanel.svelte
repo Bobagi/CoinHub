@@ -302,7 +302,7 @@
 
 <style>
   .alloc-cols { display: grid; grid-template-columns: 300px 1fr; gap: var(--space-5); align-items: start; }
-  @media (max-width: 760px) { .alloc-cols { grid-template-columns: 1fr; } }
+  @media (max-width: 768px) { .alloc-cols { grid-template-columns: 1fr; } }
 
   /* min-width:0 lets the 1fr track shrink below the chart canvas's intrinsic width, so the line chart
      stays responsive (a grid track's default `auto` minimum would otherwise pin it open and overflow). */
