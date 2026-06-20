@@ -354,9 +354,11 @@ when logged out remains in console). Full report: `.claude/frontend-review/2026-
   targets ≥24px (`.link-btn`, the CoinHub wordmark). LockOverlay `3rem` → `var(--space-7)`.
 - Reviewer artifacts land in `.claude/frontend-review/` — **gitignored** (`.claude/`); the skill never
   stores credentials (a session cookie is fetched transiently, then wiped).
-- **Deferred on purpose (too broad for an autonomous pass):** the global `button{}` paints every button as
-  primary, forcing resets on non-primary buttons (`.brand`/`.menu-item`/`.ghost`). Clean fix = neutral
-  default + explicit `.btn-primary`, but it touches every button → do it as a reviewed refactor.
+- **Button system inverted (DONE 2026-06-20):** the global `button{}` no longer paints every button gold.
+  **Default is now neutral** (surface-2 + border); **gold is opt-in via `.btn-primary`** (added to the 21
+  real CTAs). `.ghost`/`.danger` and the component-classed buttons (tab/subtab/env-btn/period-btn/coinpill/
+  brand/menu-item/link-btn/toast-close) are unchanged. Appearance is identical — but new buttons now
+  default to neutral, so a primary CTA must add `class="btn-primary"` (don't rely on a gold default).
 
 **Follow-up from owner testing (2026-06-20):** (a) **Robots collapsed to ONE on/off** — `is_enabled` and
 the "Daily auto-buy (DCA)" checkbox were redundant (a robot IS its daily DCA); removed the checkbox, the
