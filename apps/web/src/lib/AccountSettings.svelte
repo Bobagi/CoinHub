@@ -213,7 +213,7 @@
     <LanguageDropdown />
   </section>
 
-  <section class="card access-card">
+  <section class="card">
     <div class="card-header">
       <span class="card-title">{$t('account.access.title')}</span>
       <span class="card-subtitle">{$t('account.access.subtitle')}</span>
@@ -283,14 +283,15 @@
 </main>
 
 <style>
+  /* One column: every card (and the header) shares the same width and is centered on the page. */
+  .head, .card { max-width: 640px; width: 100%; margin-inline: auto; }
   .head { display: flex; flex-direction: column; gap: var(--space-2); }
   .head .btn-sm { align-self: flex-start; }
-  .card { max-width: 640px; width: 100%; }
   .danger { border-color: rgba(255, 90, 95, 0.4); }
   .danger-title { color: var(--red); }
   .warning { color: var(--muted); font-size: var(--text-sm); line-height: 1.55; background: rgba(255, 90, 95, 0.08); border: 1px solid rgba(255, 90, 95, 0.25); border-radius: var(--radius-sm); padding: var(--space-3); }
-  /* The access log is a wide table, so it gets more room than the 640px form cards. */
-  .card.access-card { max-width: 920px; }
+  /* The access table keeps its full width and simply scrolls horizontally inside the card if it
+     doesn't fit — so the card stays the same size as the others instead of stretching. */
   .access-scroll { overflow-x: auto; }
   .access-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
   /* Cells don't wrap — they use the available width (the card scrolls horizontally only if needed). */

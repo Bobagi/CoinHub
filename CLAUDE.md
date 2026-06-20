@@ -304,10 +304,12 @@ the IP weight limit (above) bites first.
   `apps/web/scripts/copy-flags.mjs` (wired into the `build` script: `vite build && node …`). Served
   **same-origin** on purpose — the vhost CSP is `img-src 'self' data:`, which blocks external flag CDNs,
   and local SVGs (unlike emoji flags) render on Windows. Missing flag ⇒ the `<img>` `on:error` hides it.
-  The access-history card is widened (`.card.access-card` max-width 920px vs the 640px form cards) and
-  its table cells are `white-space:nowrap` (use the width, scroll-x only if needed) — the previous
-  default-`.card` width made the Location column wrap badly. **Standing rule: whenever the UI shows a
-  country/language, include its flag (local SVG, never emoji).** See `Flag.svelte` (languages pt/en/es).
+  **All account cards share one width and are centered** (`.head, .card { max-width:640px; margin-inline:auto }`)
+  — keep that uniform column; don't widen a single card (an earlier 920px access-card looked
+  inconsistent). The access table keeps its natural width via `white-space:nowrap` and scrolls
+  horizontally **inside** its card (`.access-scroll`) when it doesn't fit, so the card stays the same
+  size as the others. **Standing rule: whenever the UI shows a country/language, include its flag
+  (local SVG, never emoji).** See `Flag.svelte` (languages pt/en/es).
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
