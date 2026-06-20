@@ -1,5 +1,8 @@
 logs/*
 
+# Claude Code local state + frontend-review artifacts (screenshots can contain live account data)
+.claude/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
