@@ -323,7 +323,10 @@ func (worker *AutomationWorker) processDailyPurchasesForUser(applicationContext 
 	// Each robot runs its own daily DCA buy for its coin, independently and idempotently per day.
 	robots, _ := worker.robotRepository.ListRobotsForUser(applicationContext, userIdentifier, environmentName)
 	for _, robot := range robots {
-		if !robot.IsEnabled || !robot.DailyPurchaseEnabled || robot.CapitalThreshold <= 0 {
+		// A robot's single on/off is IsEnabled — an enabled robot IS its daily DCA buy (that is the
+		// robot's whole purpose), so there is no separate "daily purchase" gate. CapitalThreshold<=0
+		// means "configured but no amount set yet", so it just doesn't buy until an amount is given.
+		if !robot.IsEnabled || robot.CapitalThreshold <= 0 {
 			continue
 		}
 		if nowUTC.Hour() != robot.DailyPurchaseHourUTC {

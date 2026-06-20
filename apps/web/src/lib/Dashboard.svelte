@@ -495,7 +495,7 @@
         target_profit_percent: 1.5,
         stop_loss_percent: null,
         daily_purchase_hour_utc: localHourToUtc(4),
-        daily_purchase_enabled: false,
+        daily_purchase_enabled: true,
         sell_order_validity_days: 0,
         is_enabled: true
       })
@@ -516,6 +516,8 @@
     robotMsg = ''
     try {
       robotDraft.daily_purchase_hour_utc = localHourToUtc(robotDailyHourLocal)
+      // The robot's single on/off is is_enabled; keep the (now vestigial) daily flag mirroring it.
+      robotDraft.daily_purchase_enabled = robotDraft.is_enabled
       if (!(robotDraft.stop_loss_percent && robotDraft.stop_loss_percent > 0)) robotDraft.stop_loss_percent = null
       const updated = await api.updateRobot(robotDraft)
       await loadRobots()
@@ -726,14 +728,14 @@
         {#if robotErr}<p class="error mt-2">{robotErr}</p>{/if}
 
         {#if selectedRobot && robotDraft}
-          <div class="bot-status" class:on={robotDraft.is_enabled && robotDraft.daily_purchase_enabled && robotDraft.capital_threshold > 0}>
+          <div class="bot-status" class:on={robotDraft.is_enabled && robotDraft.capital_threshold > 0}>
             <div class="bot-head">
               <span class="badge {robotDraft.is_enabled ? 'green' : 'amber'}">{robotDraft.is_enabled ? $t('robots.on') : $t('robots.off')}</span>
               <strong>{robotDraft.symbol}</strong>
               <span class="spacer"></span>
               <label class="switch-inline"><input type="checkbox" bind:checked={robotDraft.is_enabled} /> {$t('robots.master')}</label>
             </div>
-            {#if robotDraft.is_enabled && robotDraft.daily_purchase_enabled && robotDraft.capital_threshold > 0}
+            {#if robotDraft.is_enabled && robotDraft.capital_threshold > 0}
               <p class="muted">{$t('bot.summary', { time: formatHour(robotDailyHourLocal), capital: fmt(robotDraft.capital_threshold), symbol: robotDraft.symbol, target: robotDraft.target_profit_percent })}</p>
               {#if !connected}<p class="warn">{$t('bot.needsConnection')}</p>{/if}
               {#if robotProductionNeedsLive}<p class="warn">{$t('bot.needsLive')}</p>{/if}
@@ -746,16 +748,10 @@
             <label for="robot-name">{$t('robots.name')}</label>
             <input id="robot-name" bind:value={robotDraft.name} placeholder={$t('robots.namePlaceholder')} />
           </div>
-          <div class="grid-2 mt-4">
-            <div class="field" style="margin-top:0">
-              <label for="robot-coin">{$t('robots.coin')}</label>
-              <input id="robot-coin" value={robotDraft.symbol} disabled />
-              {#if quoteAssetOf(robotDraft.symbol)}<span class="muted">{$t('buy.spotHint', { quote: quoteAssetOf(robotDraft.symbol) })}</span>{/if}
-            </div>
-            <label class="checkbox-row" style="margin-top:0">
-              <input type="checkbox" bind:checked={robotDraft.daily_purchase_enabled} />
-              {$t('robots.dailyEnabled')}
-            </label>
+          <div class="field mt-4">
+            <label for="robot-coin">{$t('robots.coin')}</label>
+            <input id="robot-coin" value={robotDraft.symbol} disabled />
+            {#if quoteAssetOf(robotDraft.symbol)}<span class="muted">{$t('buy.spotHint', { quote: quoteAssetOf(robotDraft.symbol) })}</span>{/if}
           </div>
           <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
