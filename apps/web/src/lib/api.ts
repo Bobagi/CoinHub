@@ -11,6 +11,7 @@ export interface User {
   is_admin: boolean
   email_verified: boolean
   created_at: string
+  avatar_url?: string // same-origin proxy path for the Google profile picture; empty when none
 }
 
 export interface AuthProviders {

@@ -9,6 +9,7 @@ type User struct {
 	PasswordHash  string // empty for accounts created via Google that have not set a password
 	GoogleSubject string // OIDC `sub` of the linked Google account; empty when not linked
 	DisplayName     string
+	AvatarURL       string // Google profile picture URL; empty when not linked / no picture
 	IsActive        bool
 	IsAdmin         bool       // admins access the B3 tab and get unlimited trading robots
 	EmailVerifiedAt *time.Time // nil until the user confirms their email (Google sign-ups are pre-verified)

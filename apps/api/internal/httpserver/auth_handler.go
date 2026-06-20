@@ -114,6 +114,10 @@ type userResponsePayload struct {
 	IsAdmin         bool   `json:"is_admin"`
 	EmailVerified   bool   `json:"email_verified"`
 	CreatedAt       string `json:"created_at"`
+	// AvatarURL is the same-origin proxy path for the user's Google picture, or empty when there is
+	// none. The image bytes are streamed by GET /api/v1/account/avatar (kept off googleusercontent so
+	// it loads under the strict img-src 'self' CSP).
+	AvatarURL string `json:"avatar_url"`
 }
 
 func (handler *AuthHandler) handleSignup(responseWriter http.ResponseWriter, request *http.Request) {
@@ -797,6 +801,10 @@ func (handler *AuthHandler) writeRegistrationError(responseWriter http.ResponseW
 }
 
 func toUserResponse(user *domain.User) userResponsePayload {
+	avatarURL := ""
+	if strings.TrimSpace(user.AvatarURL) != "" {
+		avatarURL = "/api/v1/account/avatar"
+	}
 	return userResponsePayload{
 		Identifier:      user.Identifier,
 		Email:           user.Email,
@@ -806,6 +814,7 @@ func toUserResponse(user *domain.User) userResponsePayload {
 		IsAdmin:         user.IsAdmin,
 		EmailVerified:   user.IsEmailVerified(),
 		CreatedAt:       user.CreatedAt.Format(time.RFC3339),
+		AvatarURL:       avatarURL,
 	}
 }
 

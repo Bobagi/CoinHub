@@ -115,6 +115,7 @@ func (service *AuthService) AuthenticateWithGoogle(authenticationContext context
 		if !existingBySubject.IsActive {
 			return nil, ErrAccountDisabled
 		}
+		service.refreshGoogleAvatar(authenticationContext, existingBySubject, googleProfile.Picture)
 		return existingBySubject, nil
 	}
 	if !errors.Is(subjectLookupError, repository.ErrUserNotFound) {
@@ -130,13 +131,14 @@ func (service *AuthService) AuthenticateWithGoogle(authenticationContext context
 			return nil, linkError
 		}
 		existingByEmail.GoogleSubject = googleProfile.Subject
+		service.refreshGoogleAvatar(authenticationContext, existingByEmail, googleProfile.Picture)
 		return existingByEmail, nil
 	}
 	if !errors.Is(emailLookupError, repository.ErrUserNotFound) {
 		return nil, emailLookupError
 	}
 
-	createdUser, creationError := service.userRepository.CreateGoogleUser(authenticationContext, normalizedEmail, googleProfile.Subject, googleProfile.Name)
+	createdUser, creationError := service.userRepository.CreateGoogleUser(authenticationContext, normalizedEmail, googleProfile.Subject, googleProfile.Name, googleProfile.Picture)
 	if creationError != nil {
 		return nil, creationError
 	}
@@ -144,6 +146,20 @@ func (service *AuthService) AuthenticateWithGoogle(authenticationContext context
 		log.Printf("Could not seed default trading settings for user %d: %v", createdUser.Identifier, defaultsError)
 	}
 	return createdUser, nil
+}
+
+// refreshGoogleAvatar keeps the stored profile picture in sync with Google's latest. Best-effort: a
+// failure to update the avatar must never block a sign-in.
+func (service *AuthService) refreshGoogleAvatar(updateContext context.Context, user *domain.User, picture string) {
+	picture = strings.TrimSpace(picture)
+	if picture == "" || picture == user.AvatarURL {
+		return
+	}
+	if updateError := service.userRepository.UpdateAvatarURL(updateContext, user.Identifier, picture); updateError != nil {
+		log.Printf("Could not update avatar for user %d: %v", user.Identifier, updateError)
+		return
+	}
+	user.AvatarURL = picture
 }
 
 // VerifyStepUpPassword checks a password against an existing account (looked up by id), for step-up

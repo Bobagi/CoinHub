@@ -29,6 +29,7 @@ type GoogleUserInfo struct {
 	Email         string `json:"email"`
 	EmailVerified bool   `json:"email_verified"`
 	Name          string `json:"name"`
+	Picture       string `json:"picture"`
 }
 
 // GoogleOAuthService implements the OAuth 2.0 authorization-code flow against Google using only the

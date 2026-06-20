@@ -18,6 +18,12 @@
 
   $: displayName = $currentUser?.display_name?.trim() || $currentUser?.email || ''
 
+  // Google profile picture (proxied same-origin). Falls back to the initial when absent or it fails
+  // to load. Reset the failure flag whenever the URL changes (e.g. a different user signs in).
+  let avatarFailed = false
+  $: avatarUrl = $currentUser?.avatar_url || ''
+  $: if (avatarUrl) avatarFailed = false
+
   async function logout() {
     open = false
     try {
@@ -64,7 +70,11 @@
       aria-expanded={open}
       on:click|stopPropagation={() => (open = !open)}
     >
-      <span class="avatar">{(displayName[0] || '?').toUpperCase()}</span>
+      {#if avatarUrl && !avatarFailed}
+        <img class="avatar avatar-img" src={avatarUrl} alt="" on:error={() => (avatarFailed = true)} />
+      {:else}
+        <span class="avatar">{(displayName[0] || '?').toUpperCase()}</span>
+      {/if}
       <span class="who">{displayName}</span>
       <span class="caret" class:up={open}>▾</span>
     </button>
@@ -95,6 +105,7 @@
   .account { position: relative; }
   .trigger { gap: var(--space-2); }
   .avatar { display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: 0.72rem; font-weight: 800; }
+  .avatar-img { object-fit: cover; padding: 0; border: 1px solid var(--border); background: var(--surface-2); }
   .who { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .caret { font-size: 0.7em; transition: transform 0.15s ease; }
   .caret.up { transform: rotate(180deg); }

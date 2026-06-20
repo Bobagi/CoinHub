@@ -47,7 +47,7 @@ docker-compose.yml   db + migrate + api (+ scraper under the `scraper` profile).
 `/api/v1/binance/{credentials,credentials/activate,price,symbols,symbol-filters,klines,open-orders}` ·
 `/api/v1/operations` (GET list / POST buy) · `/api/v1/operations/sell` (POST close-now) · `/api/v1/operations/place-sell` (POST (re)place take-profit) · `/api/v1/operations/executions` ·
 `/api/v1/portfolio/{source,assets,dividends}` ·
-`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account` (DELETE) · `/health`.
+`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account/avatar` (GET, same-origin proxy of the Google profile picture) · `/api/v1/account` (DELETE) · `/health`.
 Sessions = opaque random token in a Secure httpOnly cookie (`coin_hub_session`); only its SHA-256
 hash is stored.
 
@@ -310,6 +310,25 @@ the IP weight limit (above) bites first.
   horizontally **inside** its card (`.access-scroll`) when it doesn't fit, so the card stays the same
   size as the others. **Standing rule: whenever the UI shows a country/language, include its flag
   (local SVG, never emoji).** See `Flag.svelte` (languages pt/en/es).
+
+### 2026-06 session (Google avatar in header + open-only Positions filter)
+- **Google profile picture in the header** (`TopNav`): the avatar was a colored-initial; now Google
+  sign-ups/links show their real picture. Migration **0026** adds `users.avatar_url`; the Google
+  `picture` claim (`GoogleUserInfo.Picture`) is stored on `CreateGoogleUser` and **refreshed on every
+  Google sign-in** (`AuthService.refreshGoogleAvatar`, best-effort — never blocks login). `/auth/me`
+  exposes `avatar_url` as a **same-origin proxy path** (`/api/v1/account/avatar`) or empty; `TopNav`
+  renders `<img>` with an `on:error` fallback to the initial. The picture is **proxied server-side**
+  (`AccountHandler.handleAvatar` → `avatarProxyClient`) rather than loaded from googleusercontent
+  directly, because the vhost CSP is `img-src 'self' data:` (same reason flags are same-origin). The
+  proxy pins URL host + redirects to `*.googleusercontent.com` (anti-SSRF), requires the session
+  cookie, caps the body at 5MiB, validates `image/*`, and 404s on any failure. **Existing logged-in
+  users must sign in via Google again** to populate `avatar_url` (we can't backfill — the picture URL
+  wasn't stored before).
+- **Positions filter — open-only by default** (`Dashboard`): the Positions sub-tab now hides SOLD
+  (closed) positions by default and shows only OPEN; a **"Show sold positions"** checkbox
+  (`showSoldPositions`, off by default) reveals them. The checkbox only appears when there are sold
+  positions to reveal (`hasSoldPositions`); toggling resets to page 1. CANCELED positions are still
+  always hidden. i18n `ops.showSold` (en/pt/es).
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add

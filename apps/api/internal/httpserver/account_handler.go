@@ -4,13 +4,37 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"coin-hub/internal/service"
 )
+
+// avatarProxyClient fetches Google profile pictures server-side so they can be served same-origin
+// under the strict CSP. Redirects are pinned to googleusercontent.com to avoid SSRF via redirect.
+var avatarProxyClient = &http.Client{
+	Timeout: 8 * time.Second,
+	CheckRedirect: func(request *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return errors.New("too many redirects")
+		}
+		if !isGoogleUserContentHost(request.URL.Hostname()) {
+			return errors.New("avatar redirect to a disallowed host")
+		}
+		return nil
+	},
+}
+
+// isGoogleUserContentHost reports whether a host belongs to Google's user-content CDN (where profile
+// pictures live), used both to validate the stored URL and to pin redirects.
+func isGoogleUserContentHost(host string) bool {
+	host = strings.ToLower(host)
+	return host == "googleusercontent.com" || strings.HasSuffix(host, ".googleusercontent.com")
+}
 
 // AccountHandler serves the session-protected account-management endpoints: editing the profile,
 // setting/changing the password, permanently deleting the account, and listing the account's
@@ -37,7 +61,61 @@ func (handler *AccountHandler) RegisterRoutes(router *http.ServeMux) {
 	router.HandleFunc("/api/v1/account/profile", handler.handleProfile)
 	router.HandleFunc("/api/v1/account/password", handler.handlePassword)
 	router.HandleFunc("/api/v1/account/access", handler.handleAccessHistory)
+	router.HandleFunc("/api/v1/account/avatar", handler.handleAvatar)
 	router.HandleFunc("/api/v1/account", handler.handleDeleteAccount)
+}
+
+// handleAvatar proxies the authenticated user's Google profile picture same-origin, so the header
+// avatar loads under the vhost CSP (img-src 'self'), which would block googleusercontent.com directly.
+// Any failure (no avatar, expired URL, non-image) returns 404 so the SPA falls back to the initial.
+func (handler *AccountHandler) handleAvatar(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	lookupContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	defer cancel()
+	account, lookupError := handler.authService.GetUserByIdentifier(lookupContext, userIdentifier)
+	if lookupError != nil || strings.TrimSpace(account.AvatarURL) == "" {
+		http.NotFound(responseWriter, request)
+		return
+	}
+
+	parsedURL, parseError := url.Parse(strings.TrimSpace(account.AvatarURL))
+	if parseError != nil || parsedURL.Scheme != "https" || !isGoogleUserContentHost(parsedURL.Hostname()) {
+		http.NotFound(responseWriter, request)
+		return
+	}
+
+	fetchContext, fetchCancel := context.WithTimeout(request.Context(), 8*time.Second)
+	defer fetchCancel()
+	upstreamRequest, requestError := http.NewRequestWithContext(fetchContext, http.MethodGet, parsedURL.String(), nil)
+	if requestError != nil {
+		http.NotFound(responseWriter, request)
+		return
+	}
+	upstreamResponse, responseError := avatarProxyClient.Do(upstreamRequest)
+	if responseError != nil {
+		http.NotFound(responseWriter, request)
+		return
+	}
+	defer upstreamResponse.Body.Close()
+
+	contentType := upstreamResponse.Header.Get("Content-Type")
+	if upstreamResponse.StatusCode != http.StatusOK || !strings.HasPrefix(contentType, "image/") {
+		http.NotFound(responseWriter, request)
+		return
+	}
+
+	responseWriter.Header().Set("Content-Type", contentType)
+	responseWriter.Header().Set("Cache-Control", "private, max-age=3600")
+	responseWriter.WriteHeader(http.StatusOK)
+	_, _ = io.Copy(responseWriter, io.LimitReader(upstreamResponse.Body, 5<<20))
 }
 
 func (handler *AccountHandler) requireUser(responseWriter http.ResponseWriter, request *http.Request) (int64, bool) {

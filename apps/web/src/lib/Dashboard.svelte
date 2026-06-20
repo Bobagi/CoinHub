@@ -370,8 +370,17 @@
   }
 
   $: belowMinimum = !!tradeFilters && tradeFilters.min_notional > 0 && tradeAmount < tradeFilters.min_notional
-  // CANCELED operations (take-profit removed externally) are dropped from the positions view.
-  $: visiblePositions = operations.filter((operation) => operation.status !== 'CANCELED')
+  // Positions view: hide CANCELED (take-profit removed externally) always, and hide SOLD (closed)
+  // unless the user opts in — the default is "still open" only. Toggling resets to the first page.
+  let showSoldPositions = false
+  $: visiblePositions = operations.filter(
+    (operation) => operation.status !== 'CANCELED' && (showSoldPositions || operation.status === 'OPEN'),
+  )
+  $: hasSoldPositions = operations.some((operation) => operation.status === 'SOLD')
+  function toggleShowSold() {
+    showSoldPositions = !showSoldPositions
+    positionsPage = 1
+  }
 
   // Paginate the (potentially ever-growing) positions and history tables; default 10 rows per page.
   let positionsPage = 1
@@ -904,6 +913,12 @@
           <p>{$t('ops.soldMeaning')}</p>
           <p>{$t('ops.sellOrderMeaning')}</p>
         </details>
+        {#if hasSoldPositions}
+          <label class="show-sold mt-3">
+            <input type="checkbox" checked={showSoldPositions} on:change={toggleShowSold} />
+            {$t('ops.showSold')}
+          </label>
+        {/if}
         {#if visiblePositions.length === 0}
           <p class="muted mt-3">{$t('ops.none')}</p>
         {:else}
@@ -1102,6 +1117,8 @@
   .subtabs { display: flex; gap: var(--space-1); }
   .subtab { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); height: 2rem; padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-sm); }
   .subtab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
+  .show-sold { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--muted); cursor: pointer; }
+  .show-sold input { width: 1rem; height: 1rem; accent-color: var(--brand); cursor: pointer; }
 
   .table { display: flex; flex-direction: column; overflow-x: auto; }
   .trow { display: grid; grid-template-columns: 1fr 1fr 1fr 1.2fr 1.2fr 0.9fr 1.3fr 1.4fr 200px; gap: var(--space-2); padding: var(--space-3) var(--space-1); border-bottom: 1px solid var(--border); align-items: center; font-size: var(--text-sm); min-width: 1020px; }
