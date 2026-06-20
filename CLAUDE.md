@@ -330,6 +330,26 @@ the IP weight limit (above) bites first.
   positions to reveal (`hasSoldPositions`); toggling resets to page 1. CANCELED positions are still
   always hidden. i18n `ops.showSold` (en/pt/es).
 
+### 2026-06 session (frontend-review pass: mobile Positions reflow + a11y/consistency)
+First run of the reusable **`frontend-review`** skill (`Bobagi/claude-skills`, an agnostic 3-pillar
+UI reviewer) against coin.bobagi.space. Applied fixes:
+- **Positions table reflows to stacked label/value cards below 600px** (`.positions-table` scoped CSS +
+  per-cell `data-label`; the `.thead` is hidden on mobile). The 9-column grid (`min-width:1020px` in an
+  `overflow-x:auto` card) was a side-scroll that hid the P/L and **Sell now** action on phones. Desktop
+  grid is unchanged. The History table (`.hrow`) still side-scrolls (read-only/auditing — left as is).
+- **a11y:** the account-menu trigger now has an `aria-label` (its `.who` name is `display:none` <600px,
+  so it was unnamed for assistive tech on mobile); the avatar `<img>` is `aria-hidden` (decorative)
+  rather than carrying an empty `alt`.
+- **Responsive breakpoints standardized to {600, 768}** (were 560/600/760, ad-hoc). CSS can't put a
+  `var()` inside `@media`, so the literals are repeated — the small set is the contract (noted in `app.css`).
+- **Token cleanup:** `PortfolioPanel` (B3) now uses `--space-*` instead of magic px (8/10/16/6);
+  `TopNav` avatar uses `var(--text-sm)`.
+- Reviewer artifacts (screenshots/report) land in `.claude/frontend-review/` — now **gitignored** (`.claude/`)
+  because authenticated screenshots contain live balances. The skill never stores credentials.
+- Known nit left on purpose: the `CoinHub` wordmark button is 23px tall (<24px min tap target); it's a
+  logo. Bigger deferred item flagged by the review: the global `button{}` paints every button as primary,
+  forcing resets on non-primary buttons (a neutral default + explicit `.btn-primary` would be cleaner).
+
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
 help text. **Be precise: say what we do AND what we don't.**
