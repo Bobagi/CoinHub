@@ -98,7 +98,7 @@
     backdrop-filter: blur(8px);
     position: sticky; top: 0; z-index: 30;
   }
-  .brand { gap: 0; background: transparent; border: none; padding: 0; height: auto; color: var(--text); font-weight: 800; font-size: var(--text-lg); }
+  .brand { gap: 0; background: transparent; border: none; padding: 0; height: auto; min-height: 24px; color: var(--text); font-weight: 800; font-size: var(--text-lg); }
   .brand span { color: var(--brand); }
   .binance { gap: var(--space-2); }
   .binance .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--muted); }

@@ -165,7 +165,7 @@
   .tabs { display: flex; gap: var(--space-2); margin: var(--space-4) 0; }
   .tab { flex: 1; background: transparent; border: 1px solid var(--border); color: var(--muted); font-weight: 700; }
   .tab.active { background: var(--surface-2); color: var(--text); border-color: var(--brand); }
-  .link-btn { background: transparent; border: none; color: var(--brand); font-weight: 700; padding: 0; height: auto; cursor: pointer; font-size: var(--text-sm); }
+  .link-btn { background: transparent; border: none; color: var(--brand); font-weight: 700; padding: 0; height: auto; min-height: 24px; cursor: pointer; font-size: var(--text-sm); }
   .link-btn:hover:not(:disabled) { filter: none; text-decoration: underline; }
   .forgot-link { display: block; margin-top: var(--space-3); margin-left: auto; }
   .forgot-title { font-size: var(--text-lg); margin-top: var(--space-4); }

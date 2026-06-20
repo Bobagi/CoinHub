@@ -159,8 +159,8 @@
       <span class="card-subtitle">{$t('account.profile.subtitle')}</span>
     </div>
     <div class="field">
-      <span class="field-label">{$t('account.email')}</span>
-      <input value={email} disabled />
+      <label class="field-label" for="account-email">{$t('account.email')}</label>
+      <input id="account-email" value={email} disabled />
       <span class="muted">{$t('account.emailLocked')}</span>
     </div>
     <div class="field">

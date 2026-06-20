@@ -83,12 +83,24 @@
     resendMessage = ''
     closeModal()
   }
+
+  // Esc closes the dialog (a11y). The card stops keydown propagation, so it handles Esc itself;
+  // the window handler covers the case where focus is outside the card (e.g. on the backdrop/body).
+  function onCardKeydown(event: KeyboardEvent) {
+    event.stopPropagation()
+    if (event.key === 'Escape') close()
+  }
+  function onWindowKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape' && $appModal) close()
+  }
 </script>
+
+<svelte:window on:keydown={onWindowKeydown} />
 
 {#if $appModal}
   <div class="backdrop" role="presentation" on:click={close}>
     <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
-    <div class="modal-card" role="dialog" aria-modal="true" on:click|stopPropagation on:keydown|stopPropagation>
+    <div class="modal-card" role="dialog" aria-modal="true" on:click|stopPropagation on:keydown={onCardKeydown}>
       {#if $appModal.type === 'verify'}
         <span class="micon" aria-hidden="true">✉️</span>
         <h2 class="mtitle">{$t('wall.title')}</h2>
@@ -151,10 +163,10 @@
   .mtext { color: var(--text); line-height: 1.5; margin: 0; }
   .mactions { display: flex; gap: var(--space-2); justify-content: center; flex-wrap: wrap; margin-top: var(--space-2); }
   .stepup-form { display: flex; flex-direction: column; gap: var(--space-2); width: 100%; }
-  .stepup-label { font-size: var(--text-sm); color: var(--text-muted); text-align: left; }
+  .stepup-label { font-size: var(--text-sm); color: var(--muted); text-align: left; }
   .stepup-form input { width: 100%; }
-  .stepup-or { color: var(--text-muted); font-size: var(--text-sm); }
-  .muted-hint { color: var(--text-muted); font-size: var(--text-sm); }
-  .error { color: var(--danger, #ff6b6b); font-size: var(--text-sm); margin: 0; }
-  .success { color: var(--success, #51cf66); font-size: var(--text-sm); margin: 0; }
+  .stepup-or { color: var(--muted); font-size: var(--text-sm); }
+  .muted-hint { color: var(--muted); font-size: var(--text-sm); }
+  .error { color: var(--red); font-size: var(--text-sm); margin: 0; }
+  .success { color: var(--green); font-size: var(--text-sm); margin: 0; }
 </style>

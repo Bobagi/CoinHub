@@ -1058,7 +1058,7 @@
   .locked-content.dimmed { pointer-events: none; opacity: 0.5; filter: grayscale(0.4); user-select: none; }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); align-items: start; }
-  .conn { max-width: 560px; }
+  .conn { max-width: 560px; margin-inline: auto; }
   .checkbox-row { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 0; font-weight: 600; }
   .tz-note { margin-top: var(--space-2); }
 

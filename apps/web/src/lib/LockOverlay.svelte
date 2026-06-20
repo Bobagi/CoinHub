@@ -36,7 +36,7 @@
     display: flex;
     align-items: flex-start;
     justify-content: center;
-    padding: 3rem var(--space-4) 0;
+    padding: var(--space-7) var(--space-4) 0;
     cursor: not-allowed;
   }
   .lock-card {
@@ -50,7 +50,7 @@
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     padding: var(--space-5);
-    box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.35));
+    box-shadow: var(--shadow-pop);
     cursor: default;
   }
   .lock-icon { font-size: 2rem; }
