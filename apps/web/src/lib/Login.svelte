@@ -99,7 +99,7 @@
             <input id="forgot-email" type="email" bind:value={email} required placeholder="you@example.com" />
           </div>
           {#if error}<p class="error mt-3">{error}</p>{/if}
-          <button type="submit" class="btn-block mt-4" disabled={busy}>
+          <button type="submit" class="btn-primary btn-block mt-4" disabled={busy}>
             {busy ? $t('login.wait') : $t('login.forgotSubmit')}
           </button>
         </form>
@@ -143,7 +143,7 @@
           <button type="button" class="link-btn forgot-link" on:click={showForgot}>{$t('login.forgot')}</button>
         {/if}
         {#if error}<p class="error mt-3">{error}</p>{/if}
-        <button type="submit" class="btn-block mt-5" disabled={busy}>
+        <button type="submit" class="btn-primary btn-block mt-5" disabled={busy}>
           {busy ? $t('login.wait') : mode === 'login' ? $t('login.signIn') : $t('login.createAccount')}
         </button>
       </form>

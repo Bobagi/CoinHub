@@ -23,7 +23,7 @@
     <span class="lock-icon" aria-hidden="true">🔒</span>
     <p>{message}</p>
     {#if ctaLabel && onCta}
-      <button class="btn-sm" on:click={onCta}>{ctaLabel}</button>
+      <button class="btn-sm btn-primary" on:click={onCta}>{ctaLabel}</button>
     {/if}
   </div>
 </div>

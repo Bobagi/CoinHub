@@ -22,7 +22,7 @@
 <div class="verify-banner-outer">
   <div class="verify-banner">
     <span class="vb-text">⚠ {$t('verify.bannerText')}</span>
-    <button class="btn-sm vb-action" disabled={busy} on:click={resend}>{busy ? $t('common.saving') : $t('verify.resend')}</button>
+    <button class="btn-sm vb-action btn-primary" disabled={busy} on:click={resend}>{busy ? $t('common.saving') : $t('verify.resend')}</button>
     {#if message}<span class="muted vb-msg">{message}</span>{/if}
   </div>
 </div>

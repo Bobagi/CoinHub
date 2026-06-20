@@ -83,7 +83,7 @@
 
   <input class="mt-4" bind:value={walletUrl} placeholder={$t('portfolio.placeholder')} />
   <div class="actions">
-    <button on:click={saveSource} disabled={saving}>{saving ? $t('common.saving') : $t('portfolio.saveUrl')}</button>
+    <button class="btn-primary" on:click={saveSource} disabled={saving}>{saving ? $t('common.saving') : $t('portfolio.saveUrl')}</button>
     <button class="ghost" on:click={loadAssets} disabled={busyAssets || !savedUrl}>{busyAssets ? $t('portfolio.loading') : $t('portfolio.loadAssets')}</button>
     <button class="ghost" on:click={loadDividends} disabled={busyDividends || !savedUrl}>{busyDividends ? $t('portfolio.loading') : $t('portfolio.dividends')}</button>
   </div>

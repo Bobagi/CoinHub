@@ -49,11 +49,11 @@
     {#if !token}
       <h1 class="title">{$t('reset.title')}</h1>
       <p class="error mt-3">{$t('reset.invalid')}</p>
-      <button class="btn-block mt-4" on:click={goToSignIn}>{$t('reset.toSignIn')}</button>
+      <button class="btn-primary btn-block mt-4" on:click={goToSignIn}>{$t('reset.toSignIn')}</button>
     {:else if done}
       <h1 class="title">{$t('reset.doneTitle')}</h1>
       <p class="muted mt-2">{$t('reset.doneText')}</p>
-      <button class="btn-block mt-5" on:click={goToSignIn}>{$t('reset.toSignIn')}</button>
+      <button class="btn-primary btn-block mt-5" on:click={goToSignIn}>{$t('reset.toSignIn')}</button>
     {:else}
       <h1 class="title">{$t('reset.title')}</h1>
       <form on:submit|preventDefault={submit}>
@@ -66,7 +66,7 @@
           <input id="reset-confirm" type="password" bind:value={confirmPassword} required autocomplete="new-password" />
         </div>
         {#if error}<p class="error mt-3">{error}</p>{/if}
-        <button type="submit" class="btn-block mt-5" disabled={busy || !newPassword}>
+        <button type="submit" class="btn-primary btn-block mt-5" disabled={busy || !newPassword}>
           {busy ? $t('login.wait') : $t('reset.submit')}
         </button>
       </form>

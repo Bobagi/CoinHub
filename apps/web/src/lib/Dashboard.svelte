@@ -650,7 +650,7 @@
         <label for="cred-secret">{$t('binance.apiSecret')}</label>
         <input id="cred-secret" type="password" bind:value={credSecret} placeholder={$t('binance.apiSecret')} />
       </div>
-      <button class="btn-block mt-5" disabled={credBusy} on:click={saveCredentials}>
+      <button class="btn-primary btn-block mt-5" disabled={credBusy} on:click={saveCredentials}>
         {credBusy ? $t('binance.saving') : $t('binance.save')}
       </button>
       {#if credMsg}<p class="success mt-3">{credMsg}</p>{/if}
@@ -711,7 +711,7 @@
           <label for="trade-target">{$t('buy.target')}</label>
           <input id="trade-target" type="number" bind:value={tradeTarget} min="0" step="0.01" />
         </div>
-        <button class="btn-block mt-5" disabled={tradeBusy || belowMinimum || !(tradeAmount > 0)} on:click={buy}>
+        <button class="btn-primary btn-block mt-5" disabled={tradeBusy || belowMinimum || !(tradeAmount > 0)} on:click={buy}>
           {tradeBusy ? $t('buy.placing') : $t('buy.button')}
         </button>
         {#if tradeErr}<p class="error mt-3">{tradeErr}</p>{/if}
@@ -729,7 +729,7 @@
         {#if selectedRobot && robotDraft}
           <button class="btn-sm ghost robot-nav-btn" on:click={backToRobotList}>{$t('robots.back')}</button>
         {:else if !creatingRobot}
-          <button class="btn-sm robot-nav-btn" disabled={!canCreateRobot} on:click={() => { creatingRobot = true; robotErr = ''; robotMsg = '' }}>{$t('robots.new')}</button>
+          <button class="btn-sm btn-primary robot-nav-btn" disabled={!canCreateRobot} on:click={() => { creatingRobot = true; robotErr = ''; robotMsg = '' }}>{$t('robots.new')}</button>
         {/if}
         {#if robotMsg}<p class="success mt-2">✓ {robotMsg}</p>{/if}
         {#if robotErr}<p class="error mt-2">{robotErr}</p>{/if}
@@ -797,7 +797,7 @@
           <p class="muted">{$t('settings.validityHelp')}</p>
           <div class="robot-editor-actions mt-5">
             <button class="danger btn-sm" disabled={robotBusy} on:click={() => deleteRobot(robotDraft.id)}>{$t('robots.delete')}</button>
-            <button class="btn-sm" disabled={robotBusy} on:click={saveRobot}>{robotBusy ? $t('settings.saving') : $t('settings.save')}</button>
+            <button class="btn-sm btn-primary" disabled={robotBusy} on:click={saveRobot}>{robotBusy ? $t('settings.saving') : $t('settings.save')}</button>
           </div>
         {:else if creatingRobot}
           <div class="field">
@@ -806,7 +806,7 @@
           </div>
           <div class="robot-editor-actions mt-4">
             <button class="btn-sm ghost" disabled={robotBusy} on:click={() => (creatingRobot = false)}>{$t('common.cancel')}</button>
-            <button class="btn-sm" disabled={robotBusy || !newRobotSymbol} on:click={createRobot}>{robotBusy ? $t('robots.creating') : $t('robots.create')}</button>
+            <button class="btn-sm btn-primary" disabled={robotBusy || !newRobotSymbol} on:click={createRobot}>{robotBusy ? $t('robots.creating') : $t('robots.create')}</button>
           </div>
         {:else}
           {#if robots.length === 0}
@@ -963,7 +963,7 @@
                 <div class="col-actions ops-actions" data-label={$t('ops.actions')}>
                   {#if operation.status === 'OPEN'}
                     {#if !operation.sell_order_id}
-                      <button class="btn-sm" disabled={placeSellBusyId === operation.id} on:click={() => placeSell(operation.id)}>
+                      <button class="btn-sm btn-primary" disabled={placeSellBusyId === operation.id} on:click={() => placeSell(operation.id)}>
                         {placeSellBusyId === operation.id ? $t('ops.retrying') : $t('ops.retrySell')}
                       </button>
                     {/if}

@@ -48,11 +48,11 @@
     {:else if status === 'ok'}
       <h1 class="title">{$t('verify.okTitle')}</h1>
       <p class="muted mt-2">{$t('verify.okText')}</p>
-      <button class="btn-block mt-5" on:click={go}>{$t('verify.continue')}</button>
+      <button class="btn-primary btn-block mt-5" on:click={go}>{$t('verify.continue')}</button>
     {:else}
       <h1 class="title">{$t('verify.errorTitle')}</h1>
       <p class="error mt-2">{message}</p>
-      <button class="btn-block mt-5" on:click={go}>{$t('verify.continue')}</button>
+      <button class="btn-primary btn-block mt-5" on:click={go}>{$t('verify.continue')}</button>
     {/if}
   </div>
 </div>

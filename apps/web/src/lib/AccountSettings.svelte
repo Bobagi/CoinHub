@@ -170,7 +170,7 @@
     {#if user?.google_connected}
       <div class="pill mt-4">✓ {$t('account.googleConnected')}</div>
     {/if}
-    <button class="btn-block mt-5" disabled={profileBusy} on:click={saveProfile}>
+    <button class="btn-primary btn-block mt-5" disabled={profileBusy} on:click={saveProfile}>
       {profileBusy ? $t('common.saving') : $t('account.save')}
     </button>
     {#if profileMsg}<p class="success mt-3">{profileMsg}</p>{/if}
@@ -198,7 +198,7 @@
         <input id="confirm-password" type="password" bind:value={confirmPassword} autocomplete="new-password" />
       </div>
     </div>
-    <button class="btn-block mt-5" disabled={passwordBusy || !newPassword} on:click={savePassword}>
+    <button class="btn-primary btn-block mt-5" disabled={passwordBusy || !newPassword} on:click={savePassword}>
       {passwordBusy ? $t('common.saving') : hasPassword ? $t('account.password.saveChange') : $t('account.password.saveSet')}
     </button>
     {#if passwordMsg}<p class="success mt-3">{passwordMsg}</p>{/if}

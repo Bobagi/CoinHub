@@ -108,7 +108,7 @@
         {#if resendMessage}<p class="success">{resendMessage}</p>{/if}
         <div class="mactions">
           <button class="ghost btn-sm" disabled={busy} on:click={resend}>{busy ? $t('common.saving') : $t('verify.resend')}</button>
-          <button class="btn-sm" on:click={close}>{$t('modal.ok')}</button>
+          <button class="btn-sm btn-primary" on:click={close}>{$t('modal.ok')}</button>
         </div>
       {:else if $appModal.type === 'stepUp'}
         <span class="micon" aria-hidden="true">🔐</span>
@@ -126,7 +126,7 @@
               bind:value={stepUpPassword}
               placeholder={$t('stepup.passwordPlaceholder')}
             />
-            <button class="btn-sm" type="submit" disabled={busy || !stepUpPassword}>
+            <button class="btn-sm btn-primary" type="submit" disabled={busy || !stepUpPassword}>
               {busy ? $t('common.saving') : $t('stepup.confirm')}
             </button>
           </form>
@@ -145,7 +145,7 @@
       {:else}
         <span class="micon" aria-hidden="true">🔒</span>
         <p class="mtext">{$appModal.text}</p>
-        <div class="mactions"><button class="btn-sm" on:click={close}>{$t('modal.ok')}</button></div>
+        <div class="mactions"><button class="btn-sm btn-primary" on:click={close}>{$t('modal.ok')}</button></div>
       {/if}
     </div>
   </div>
