@@ -330,25 +330,33 @@ the IP weight limit (above) bites first.
   positions to reveal (`hasSoldPositions`); toggling resets to page 1. CANCELED positions are still
   always hidden. i18n `ops.showSold` (en/pt/es).
 
-### 2026-06 session (frontend-review pass: mobile Positions reflow + a11y/consistency)
-First run of the reusable **`frontend-review`** skill (`Bobagi/claude-skills`, an agnostic 3-pillar
-UI reviewer) against coin.bobagi.space. Applied fixes:
-- **Positions table reflows to stacked label/value cards below 600px** (`.positions-table` scoped CSS +
-  per-cell `data-label`; the `.thead` is hidden on mobile). The 9-column grid (`min-width:1020px` in an
-  `overflow-x:auto` card) was a side-scroll that hid the P/L and **Sell now** action on phones. Desktop
-  grid is unchanged. The History table (`.hrow`) still side-scrolls (read-only/auditing — left as is).
-- **a11y:** the account-menu trigger now has an `aria-label` (its `.who` name is `display:none` <600px,
-  so it was unnamed for assistive tech on mobile); the avatar `<img>` is `aria-hidden` (decorative)
-  rather than carrying an empty `alt`.
-- **Responsive breakpoints standardized to {600, 768}** (were 560/600/760, ad-hoc). CSS can't put a
-  `var()` inside `@media`, so the literals are repeated — the small set is the contract (noted in `app.css`).
-- **Token cleanup:** `PortfolioPanel` (B3) now uses `--space-*` instead of magic px (8/10/16/6);
-  `TopNav` avatar uses `var(--text-sm)`.
-- Reviewer artifacts (screenshots/report) land in `.claude/frontend-review/` — now **gitignored** (`.claude/`)
-  because authenticated screenshots contain live balances. The skill never stores credentials.
-- Known nit left on purpose: the `CoinHub` wordmark button is 23px tall (<24px min tap target); it's a
-  logo. Bigger deferred item flagged by the review: the global `button{}` paints every button as primary,
-  forcing resets on non-primary buttons (a neutral default + explicit `.btn-primary` would be cleaner).
+### 2026-06 session (frontend-review FULL pass — every screen/tab/modal, a11y + token fixes)
+Complete UI review via the reusable **`frontend-review`** skill (`Bobagi/claude-skills`, agnostic
+3-pillar reviewer; now drives tabs/modals via `--scenarios`) against coin.bobagi.space, authenticated as
+the owner/admin. Covered public auth pages, all dashboard tabs (Trade/Connection/B3), sub-tabs
+(Allocation/Profitability/Positions/History), the robot editor, account, and AppModal/LockOverlay — at
+390/768/1280. **Automated layout/a11y signals are now clean app-wide** (only a benign `401` on `/auth/me`
+when logged out remains in console). Full report: `.claude/frontend-review/2026-06-20/report-full.md`
+(gitignored — live data). Fixes (commits `3d52299`, `19a6729`, `1f3875e`):
+- **Tables reflow to stacked label/value cards < 600px** — both Positions (`.positions-table`) and History
+  (`.htable`) (per-cell `data-label`, `.thead` hidden on mobile); the desktop grids are unchanged. The
+  9-col Positions grid (`min-width:1020px` in `overflow-x:auto`) was a side-scroll hiding P/L + **Sell now**.
+- **Undefined CSS tokens fixed** (rendered wrong values): AppModal `var(--text-muted)` (undefined, *no
+  fallback* → step-up text was full-bright, not muted), `var(--danger)`/`var(--success)` (off-palette
+  fallbacks); LockOverlay `var(--shadow-lg)` → `--muted`/`--red`/`--green`/`--shadow-pop`. (`--topbar-h`
+  is runtime-set by TopNav — correct.) **Check before adding a token: grep `var(--x)` vs the `:root` set.**
+- **AppModal: Esc closes** the dialog (was keyboard-trapped). **Account Email** got a real `<label for>`
+  (was an unlabeled disabled input). Account-menu trigger got an `aria-label` (name is `display:none`
+  <600px); avatar `<img>` is `aria-hidden`.
+- **Connection card centered** (`margin-inline:auto`; was `max-width:560px` left-aligned → empty right
+  half on desktop). **Breakpoints standardized to {600, 768}** (were 560/600/760).
+- **Token cleanup:** `PortfolioPanel` magic px → `--space-*`; `TopNav` avatar → `var(--text-sm)`. Tap
+  targets ≥24px (`.link-btn`, the CoinHub wordmark). LockOverlay `3rem` → `var(--space-7)`.
+- Reviewer artifacts land in `.claude/frontend-review/` — **gitignored** (`.claude/`); the skill never
+  stores credentials (a session cookie is fetched transiently, then wiped).
+- **Deferred on purpose (too broad for an autonomous pass):** the global `button{}` paints every button as
+  primary, forcing resets on non-primary buttons (`.brand`/`.menu-item`/`.ghost`). Clean fix = neutral
+  default + explicit `.btn-primary`, but it touches every button → do it as a reviewed refactor.
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
