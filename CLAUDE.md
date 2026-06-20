@@ -358,6 +358,13 @@ when logged out remains in console). Full report: `.claude/frontend-review/2026-
   primary, forcing resets on non-primary buttons (`.brand`/`.menu-item`/`.ghost`). Clean fix = neutral
   default + explicit `.btn-primary`, but it touches every button → do it as a reviewed refactor.
 
+**Follow-up from owner testing (2026-06-20):** (a) **Robots collapsed to ONE on/off** — `is_enabled` and
+the "Daily auto-buy (DCA)" checkbox were redundant (a robot IS its daily DCA); removed the checkbox, the
+worker now gates on `IsEnabled && CapitalThreshold>0` (see backlog #10 re the vestigial column). (b)
+**Pagination audited** — only the access-log is real server-side; Positions/History load-all + slice in
+the front, kept on purpose because the donut/profitability need the full set (documented in `Dashboard.svelte`
++ backlog #9). The B3 tables get one scraper payload (client paging is fine).
+
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
 help text. **Be precise: say what we do AND what we don't.**
@@ -414,6 +421,17 @@ help text. **Be precise: say what we do AND what we don't.**
    the old single-user services they used remain as dead code).
 8. **Robot monetization** — standard users are capped at 1 robot/environment
    (`StandardUserRobotLimitPerEnvironment`), admins unlimited; the payment/billing piece is not built.
+9. **Real server-side pagination for Positions + History** — both currently load the FULL set
+   (`getOperations`/`getExecutions`) and slice client-side (`Pagination.svelte` is front-only). This is
+   **intentional today**: AllocationPanel + ProfitabilityPanel aggregate over all operations/executions on
+   the same screen, so the data is needed anyway. To make the lists truly paged (LIMIT/OFFSET + COUNT)
+   without breaking the charts, first add **server-side summary endpoints** (allocation totals + the
+   profitability cost/realized + site-vs-robots split), then paginate the list endpoints. The access-log
+   table (`/account/access`) already is real server-side pagination — use it as the model. (Owner opted to
+   *document for now*, 2026-06-20.)
+10. **Drop the vestigial `trading_robots.daily_purchase_enabled` column** — robots collapsed to a single
+   on/off (`is_enabled`); the worker no longer reads `daily_purchase_enabled` (UI sets it = is_enabled for
+   hygiene). Safe to remove in a later additive migration once nothing references it.
 
 *(Done 2026-06: surfaced the per-order cap in the UI + rebuilt the per-robot max-invested ceiling —
 migration 0023. See "Trading strategy, terminology & spending caps".)*

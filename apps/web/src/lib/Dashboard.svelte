@@ -387,6 +387,13 @@
   let positionsPageSize = 10
   let historyPage = 1
   let historyPageSize = 10
+  // NOTE: Positions and History paginate CLIENT-SIDE on purpose, not because pagination is "dumb".
+  // The full `operations` set is required on this same screen by AllocationPanel (donut over all OPEN
+  // positions) and ProfitabilityPanel (cost basis + realized over ALL operations); `executions` feeds
+  // the profitability site-vs-robots split. So the data is already loaded for the charts and the tables
+  // just slice it. Making these true server-side paginated (LIMIT/OFFSET) would require moving those
+  // aggregations to server-side summary endpoints first — see TODO/backlog. (The access-log table IS
+  // real server-side pagination.)
   $: pagedPositions = visiblePositions.slice((positionsPage - 1) * positionsPageSize, positionsPage * positionsPageSize)
   $: pagedExecutions = executions.slice((historyPage - 1) * historyPageSize, historyPage * historyPageSize)
 
