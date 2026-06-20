@@ -1000,14 +1000,14 @@
             </div>
             {#each pagedExecutions as execution (execution.id)}
               <div class="hrow">
-                <div class="muted">{$formatDateTime(execution.executed_at)}</div>
-                <div><span class="badge {execution.operation_type === 'SELL' ? 'green' : execution.operation_type === 'SELL_ORDER_PLACED' ? 'blue' : execution.operation_type.startsWith('SELL_') ? 'red' : 'amber'}">{$t('hist.act.' + execution.operation_type)}</span></div>
-                <div><span class="by-badge {execution.initiated_by === 'BOT' ? 'bot' : 'user'}">{execution.initiated_by === 'BOT' ? $t('hist.bot') : $t('hist.you')}</span></div>
-                <div>{execution.symbol}</div>
-                <div>{fmt(execution.unit_price)}</div>
-                <div>{fmt(execution.quantity)}</div>
-                <div>{fmt(execution.total_value)}</div>
-                <div class="col-actions">
+                <div class="muted" data-label={$t('hist.when')}>{$formatDateTime(execution.executed_at)}</div>
+                <div data-label={$t('hist.action')}><span class="badge {execution.operation_type === 'SELL' ? 'green' : execution.operation_type === 'SELL_ORDER_PLACED' ? 'blue' : execution.operation_type.startsWith('SELL_') ? 'red' : 'amber'}">{$t('hist.act.' + execution.operation_type)}</span></div>
+                <div data-label={$t('hist.by')}><span class="by-badge {execution.initiated_by === 'BOT' ? 'bot' : 'user'}">{execution.initiated_by === 'BOT' ? $t('hist.bot') : $t('hist.you')}</span></div>
+                <div data-label={$t('ops.pair')}>{execution.symbol}</div>
+                <div data-label={$t('hist.price')}>{fmt(execution.unit_price)}</div>
+                <div data-label={$t('hist.qty')}>{fmt(execution.quantity)}</div>
+                <div data-label={$t('hist.total')}>{fmt(execution.total_value)}</div>
+                <div class="col-actions" data-label={$t('hist.result')}>
                   {#if execution.success}
                     <span class="badge green">✓</span>
                   {:else}
@@ -1159,5 +1159,15 @@
       content: attr(data-label); color: var(--muted); font-size: var(--text-xs); font-weight: 700;
     }
     .positions-table .sell-row { justify-content: flex-end; }
+    /* History reflows the same way (read-only, no actions column). */
+    .htable .thead { display: none; }
+    .htable .hrow {
+      grid-template-columns: 1fr; min-width: 0; gap: var(--space-1);
+      padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md);
+      margin-bottom: var(--space-2);
+    }
+    .htable .hrow > div { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+    .htable .hrow > div::before { content: attr(data-label); color: var(--muted); font-size: var(--text-xs); font-weight: 700; flex: none; }
+    .htable .col-actions { text-align: left; }
   }
 </style>
