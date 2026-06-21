@@ -10,6 +10,7 @@
   import TopNav from './lib/TopNav.svelte'
   import ResetPassword from './lib/ResetPassword.svelte'
   import VerifyEmail from './lib/VerifyEmail.svelte'
+  import AgreementGate from './lib/AgreementGate.svelte'
   import VerifyBanner from './lib/VerifyBanner.svelte'
   import AppModal from './lib/AppModal.svelte'
   import Toasts from './lib/Toasts.svelte'
@@ -89,6 +90,10 @@
   <VerifyEmail />
 {:else if loading}
   <div class="center muted">{$t('app.loading')}</div>
+{:else if $currentUser && !$currentUser.terms_accepted}
+  <!-- Hard consent gate: no signed-in user reaches the app without an on-record acceptance of the
+       current Terms of Use + Privacy Policy (email, Google and existing users alike). -->
+  <AgreementGate />
 {:else if $currentUser}
   <TopNav />
   {#if emailEnabled && !$currentUser.email_verified}

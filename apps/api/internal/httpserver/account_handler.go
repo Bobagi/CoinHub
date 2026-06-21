@@ -43,15 +43,17 @@ type AccountHandler struct {
 	authService      *service.AuthService
 	sessionService   *service.SessionService
 	accessLogService *service.AccessLogService
+	agreementService *service.AgreementService
 	cookieName       string
 	secureCookies    bool
 }
 
-func NewAccountHandler(authService *service.AuthService, sessionService *service.SessionService, accessLogService *service.AccessLogService, cookieName string, secureCookies bool) *AccountHandler {
+func NewAccountHandler(authService *service.AuthService, sessionService *service.SessionService, accessLogService *service.AccessLogService, agreementService *service.AgreementService, cookieName string, secureCookies bool) *AccountHandler {
 	return &AccountHandler{
 		authService:      authService,
 		sessionService:   sessionService,
 		accessLogService: accessLogService,
+		agreementService: agreementService,
 		cookieName:       cookieName,
 		secureCookies:    secureCookies,
 	}
@@ -62,7 +64,36 @@ func (handler *AccountHandler) RegisterRoutes(router *http.ServeMux) {
 	router.HandleFunc("/api/v1/account/password", handler.handlePassword)
 	router.HandleFunc("/api/v1/account/access", handler.handleAccessHistory)
 	router.HandleFunc("/api/v1/account/avatar", handler.handleAvatar)
+	router.HandleFunc("/api/v1/account/agreement/accept", handler.handleAcceptAgreement)
 	router.HandleFunc("/api/v1/account", handler.handleDeleteAccount)
+}
+
+// handleAcceptAgreement records the authenticated user's consent to the current Terms of Use + Privacy
+// Policy (version, timestamp, IP, user agent) and returns the refreshed user so the SPA can drop its
+// blocking acceptance gate. This is the durable, server-side proof of consent.
+func (handler *AccountHandler) handleAcceptAgreement(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodPost {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	defer cancel()
+	if recordError := handler.agreementService.Accept(operationContext, userIdentifier, clientIPAddress(request), request.UserAgent()); recordError != nil {
+		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not record your acceptance. Please try again.")
+		return
+	}
+
+	currentUser, lookupError := handler.authService.GetUserByIdentifier(operationContext, userIdentifier)
+	if lookupError != nil || currentUser == nil {
+		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not load your account.")
+		return
+	}
+	writeJSON(responseWriter, http.StatusOK, toUserResponse(currentUser, true))
 }
 
 // handleAvatar proxies the authenticated user's Google profile picture same-origin, so the header
@@ -163,7 +194,8 @@ func (handler *AccountHandler) handleProfile(responseWriter http.ResponseWriter,
 		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not update your profile.")
 		return
 	}
-	writeJSON(responseWriter, http.StatusOK, toUserResponse(updatedUser))
+	termsAccepted := termsAcceptedFor(operationContext, handler.agreementService, updatedUser.Identifier)
+	writeJSON(responseWriter, http.StatusOK, toUserResponse(updatedUser, termsAccepted))
 }
 
 func (handler *AccountHandler) handlePassword(responseWriter http.ResponseWriter, request *http.Request) {

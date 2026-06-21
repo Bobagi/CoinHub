@@ -41,6 +41,7 @@ func main() {
 	accountDeletionAuditRepository := repository.NewPostgresAccountDeletionAuditRepository(postgresConnector.Database)
 	authTokenRepository := repository.NewPostgresAuthTokenRepository(postgresConnector.Database)
 	accountAccessEventRepository := repository.NewPostgresAccountAccessEventRepository(postgresConnector.Database)
+	agreementAcceptanceRepository := repository.NewPostgresUserAgreementAcceptanceRepository(postgresConnector.Database)
 
 	// Encryption for Binance secrets at rest. Without a key, credential storage is refused at runtime.
 	secretCipher, secretCipherError := security.NewSecretCipher(os.Getenv("CREDENTIALS_ENCRYPTION_KEY"))
@@ -72,19 +73,21 @@ func main() {
 	geoLocator := geoip.Open(os.Getenv("GEOIP_CITY_DB"))
 	defer geoLocator.Close()
 	accessLogService := service.NewAccessLogService(accountAccessEventRepository, accountEmailService, geoLocator)
-	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, accessLogService, secretCipher, secureSessionCookies)
-	accountHandler := httpserver.NewAccountHandler(authService, sessionService, accessLogService, authHandler.CookieName, secureSessionCookies)
+	// Consent: records and checks acceptance of the Terms of Use + Privacy Policy (server-side proof).
+	agreementService := service.NewAgreementService(agreementAcceptanceRepository)
+	authHandler := httpserver.NewAuthHandler(authService, sessionService, googleOAuthService, accountEmailService, accessLogService, agreementService, secretCipher, secureSessionCookies)
+	accountHandler := httpserver.NewAccountHandler(authService, sessionService, accessLogService, agreementService, authHandler.CookieName, secureSessionCookies)
 
 	// Per-user trading configuration and Binance credentials.
 	userCredentialService := service.NewUserCredentialService(binanceCredentialRepository, userRepository, secretCipher, testnetBaseURL, productionBaseURL)
-	apiHandler := httpserver.NewAPIHandler(sessionService, authService, authHandler.CookieName, userTradingSettingsRepository, userCredentialService, testnetBaseURL, productionBaseURL)
+	apiHandler := httpserver.NewAPIHandler(sessionService, authService, agreementService, authHandler.CookieName, userTradingSettingsRepository, userCredentialService, testnetBaseURL, productionBaseURL)
 
 	maxOrderQuoteAmount := maxQuoteAmountPerOrderFromEnv(100000)
 	userTradingService := service.NewUserTradingService(userCredentialService, userTradingSettingsRepository, tradingOperationRepository, tradingOperationExecutionRepository, maxOrderQuoteAmount)
-	operationsHandler := httpserver.NewOperationsHandler(sessionService, authService, authHandler.CookieName, userTradingService)
+	operationsHandler := httpserver.NewOperationsHandler(sessionService, authService, agreementService, authHandler.CookieName, userTradingService)
 
 	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService)
-	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
+	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, agreementService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
 
 	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, 30*time.Second)
 

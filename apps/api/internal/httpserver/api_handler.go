@@ -18,6 +18,7 @@ import (
 type APIHandler struct {
 	sessionService            *service.SessionService
 	authService               *service.AuthService
+	agreementService          *service.AgreementService
 	cookieName                string
 	tradingSettingsRepository repository.UserTradingSettingsRepository
 	credentialService         *service.UserCredentialService
@@ -25,10 +26,11 @@ type APIHandler struct {
 	productionBaseURL         string
 }
 
-func NewAPIHandler(sessionService *service.SessionService, authService *service.AuthService, cookieName string, tradingSettingsRepository repository.UserTradingSettingsRepository, credentialService *service.UserCredentialService, testnetBaseURL string, productionBaseURL string) *APIHandler {
+func NewAPIHandler(sessionService *service.SessionService, authService *service.AuthService, agreementService *service.AgreementService, cookieName string, tradingSettingsRepository repository.UserTradingSettingsRepository, credentialService *service.UserCredentialService, testnetBaseURL string, productionBaseURL string) *APIHandler {
 	return &APIHandler{
 		sessionService:            sessionService,
 		authService:               authService,
+		agreementService:          agreementService,
 		cookieName:                cookieName,
 		tradingSettingsRepository: tradingSettingsRepository,
 		credentialService:         credentialService,
@@ -187,7 +189,7 @@ func (handler *APIHandler) handleCredentials(responseWriter http.ResponseWriter,
 		}
 		operationContext, cancel := context.WithTimeout(request.Context(), 12*time.Second)
 		defer cancel()
-		if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+		if !enforceVerifiedAndAgreed(operationContext, responseWriter, handler.authService, handler.agreementService, userIdentifier) {
 			return
 		}
 		// Connecting the account that holds the funds is a high-risk action: require a fresh step-up.
@@ -248,7 +250,7 @@ func (handler *APIHandler) handleActivateEnvironment(responseWriter http.Respons
 
 	operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
 	defer cancel()
-	if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+	if !enforceVerifiedAndAgreed(operationContext, responseWriter, handler.authService, handler.agreementService, userIdentifier) {
 		return
 	}
 	if activationError := handler.credentialService.ActivateEnvironment(operationContext, userIdentifier, payload.Environment); activationError != nil {

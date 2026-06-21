@@ -15,18 +15,20 @@ import (
 
 // OperationsHandler serves the user-scoped trading endpoints (operations, executions, open orders).
 type OperationsHandler struct {
-	sessionService *service.SessionService
-	authService    *service.AuthService
-	cookieName     string
-	tradingService *service.UserTradingService
+	sessionService   *service.SessionService
+	authService      *service.AuthService
+	agreementService *service.AgreementService
+	cookieName       string
+	tradingService   *service.UserTradingService
 }
 
-func NewOperationsHandler(sessionService *service.SessionService, authService *service.AuthService, cookieName string, tradingService *service.UserTradingService) *OperationsHandler {
+func NewOperationsHandler(sessionService *service.SessionService, authService *service.AuthService, agreementService *service.AgreementService, cookieName string, tradingService *service.UserTradingService) *OperationsHandler {
 	return &OperationsHandler{
-		sessionService: sessionService,
-		authService:    authService,
-		cookieName:     cookieName,
-		tradingService: tradingService,
+		sessionService:   sessionService,
+		authService:      authService,
+		agreementService: agreementService,
+		cookieName:       cookieName,
+		tradingService:   tradingService,
 	}
 }
 
@@ -134,7 +136,7 @@ func (handler *OperationsHandler) handleOperations(responseWriter http.ResponseW
 		}
 		operationContext, cancel := context.WithTimeout(request.Context(), 25*time.Second)
 		defer cancel()
-		if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+		if !enforceVerifiedAndAgreed(operationContext, responseWriter, handler.authService, handler.agreementService, userIdentifier) {
 			return
 		}
 		operation, buyError := handler.tradingService.ExecuteBuy(operationContext, userIdentifier, domain.ExecutionInitiatorUser, payload.Symbol, payload.QuoteAmount, payload.TargetProfitPercent, nil)
@@ -175,7 +177,7 @@ func (handler *OperationsHandler) handleSellOperation(responseWriter http.Respon
 
 	operationContext, cancel := context.WithTimeout(request.Context(), 25*time.Second)
 	defer cancel()
-	if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+	if !enforceVerifiedAndAgreed(operationContext, responseWriter, handler.authService, handler.agreementService, userIdentifier) {
 		return
 	}
 	operation, sellError := handler.tradingService.CloseOperationNow(operationContext, userIdentifier, payload.OperationID)
@@ -212,7 +214,7 @@ func (handler *OperationsHandler) handlePlaceSell(responseWriter http.ResponseWr
 
 	operationContext, cancel := context.WithTimeout(request.Context(), 25*time.Second)
 	defer cancel()
-	if !enforceEmailVerified(operationContext, responseWriter, handler.authService, userIdentifier) {
+	if !enforceVerifiedAndAgreed(operationContext, responseWriter, handler.authService, handler.agreementService, userIdentifier) {
 		return
 	}
 	operation, placeError := handler.tradingService.PlaceTakeProfitForOperation(operationContext, userIdentifier, payload.OperationID)

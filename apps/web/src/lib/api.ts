@@ -10,6 +10,10 @@ export interface User {
   google_connected: boolean
   is_admin: boolean
   email_verified: boolean
+  // Whether the user has accepted the version of the Terms + Privacy Policy currently in force. When
+  // false the SPA shows a blocking acceptance gate and the API refuses money/robot actions.
+  terms_accepted: boolean
+  terms_version: string // version tag of the documents currently in force
   created_at: string
   avatar_url?: string // same-origin proxy path for the Google profile picture; empty when none
 }
@@ -187,6 +191,7 @@ export const api = {
     request<{ message: string }>('DELETE', '/api/v1/account', { password, confirm: true }),
   getAccessHistory: (page: number, pageSize: number) =>
     request<AccessHistory>('GET', `/api/v1/account/access?page=${page}&page_size=${pageSize}`),
+  acceptAgreement: () => request<User>('POST', '/api/v1/account/agreement/accept'),
 
   getSettings: () => request<TradingSettings>('GET', '/api/v1/settings'),
   saveSettings: (settings: TradingSettings) => request<TradingSettings>('PUT', '/api/v1/settings', settings),

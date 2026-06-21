@@ -17,15 +17,17 @@ import (
 type RobotsHandler struct {
 	sessionService      *service.SessionService
 	authService         *service.AuthService
+	agreementService    *service.AgreementService
 	cookieName          string
 	robotService        *service.RobotService
 	maxOrderQuoteAmount float64 // global per-order spending ceiling, exposed so the UI can explain it
 }
 
-func NewRobotsHandler(sessionService *service.SessionService, authService *service.AuthService, cookieName string, robotService *service.RobotService, maxOrderQuoteAmount float64) *RobotsHandler {
+func NewRobotsHandler(sessionService *service.SessionService, authService *service.AuthService, agreementService *service.AgreementService, cookieName string, robotService *service.RobotService, maxOrderQuoteAmount float64) *RobotsHandler {
 	return &RobotsHandler{
 		sessionService:      sessionService,
 		authService:         authService,
+		agreementService:    agreementService,
 		cookieName:          cookieName,
 		robotService:        robotService,
 		maxOrderQuoteAmount: maxOrderQuoteAmount,
@@ -137,6 +139,9 @@ func (handler *RobotsHandler) handleRobots(responseWriter http.ResponseWriter, r
 			writeJSONErrorCode(responseWriter, http.StatusForbidden, "Confirm your email before using this feature.", "email_unverified")
 			return
 		}
+		if !enforceAgreementAccepted(operationContext, responseWriter, handler.agreementService, currentUser.Identifier) {
+			return
+		}
 		robot, createError := handler.robotService.CreateRobot(operationContext, currentUser.Identifier, currentUser.IsAdmin, payload.toServiceInput())
 		if createError != nil {
 			handler.writeRobotError(responseWriter, createError)
@@ -173,6 +178,9 @@ func (handler *RobotsHandler) handleUpdate(responseWriter http.ResponseWriter, r
 	defer cancel()
 	if !currentUser.IsEmailVerified() {
 		writeJSONErrorCode(responseWriter, http.StatusForbidden, "Confirm your email before using this feature.", "email_unverified")
+		return
+	}
+	if !enforceAgreementAccepted(operationContext, responseWriter, handler.agreementService, currentUser.Identifier) {
 		return
 	}
 	robot, updateError := handler.robotService.UpdateRobot(operationContext, currentUser.Identifier, payload.ID, payload.toServiceInput())

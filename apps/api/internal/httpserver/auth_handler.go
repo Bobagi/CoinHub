@@ -38,6 +38,7 @@ type AuthHandler struct {
 	GoogleOAuthService  *service.GoogleOAuthService // nil when Google sign-in is not configured
 	AccountEmailService *service.AccountEmailService
 	AccessLogService    *service.AccessLogService
+	AgreementService    *service.AgreementService
 	CookieName          string
 	OAuthStateCookie    string
 	StepUpStateCookie   string
@@ -46,13 +47,14 @@ type AuthHandler struct {
 	loginThrottle       *loginThrottle
 }
 
-func NewAuthHandler(authService *service.AuthService, sessionService *service.SessionService, googleOAuthService *service.GoogleOAuthService, accountEmailService *service.AccountEmailService, accessLogService *service.AccessLogService, secretCipher *security.SecretCipher, secureCookies bool) *AuthHandler {
+func NewAuthHandler(authService *service.AuthService, sessionService *service.SessionService, googleOAuthService *service.GoogleOAuthService, accountEmailService *service.AccountEmailService, accessLogService *service.AccessLogService, agreementService *service.AgreementService, secretCipher *security.SecretCipher, secureCookies bool) *AuthHandler {
 	return &AuthHandler{
 		AuthService:         authService,
 		SessionService:      sessionService,
 		GoogleOAuthService:  googleOAuthService,
 		AccountEmailService: accountEmailService,
 		AccessLogService:    accessLogService,
+		AgreementService:    agreementService,
 		CookieName:          "coin_hub_session",
 		OAuthStateCookie:    "coin_hub_oauth_state",
 		StepUpStateCookie:   "coin_hub_stepup",
@@ -116,6 +118,13 @@ type userResponsePayload struct {
 	IsAdmin         bool   `json:"is_admin"`
 	EmailVerified   bool   `json:"email_verified"`
 	CreatedAt       string `json:"created_at"`
+	// TermsAccepted reports whether the user has accepted the version of the Terms of Use + Privacy
+	// Policy currently in force (domain.CurrentAgreementVersion). When false the SPA shows a blocking
+	// acceptance gate and the API refuses money/robot actions (code: terms_not_accepted).
+	TermsAccepted bool `json:"terms_accepted"`
+	// TermsVersion is the version tag of the documents currently in force, so the UI records consent
+	// against the same version the server expects.
+	TermsVersion string `json:"terms_version"`
 	// AvatarURL is the same-origin proxy path for the user's Google picture, or empty when there is
 	// none. The image bytes are streamed by GET /api/v1/account/avatar (kept off googleusercontent so
 	// it loads under the strict img-src 'self' CSP).
@@ -229,7 +238,8 @@ func (handler *AuthHandler) handleCurrentUser(responseWriter http.ResponseWriter
 		return
 	}
 
-	writeJSON(responseWriter, http.StatusOK, toUserResponse(currentUser))
+	termsAccepted := termsAcceptedFor(lookupContext, handler.AgreementService, currentUser.Identifier)
+	writeJSON(responseWriter, http.StatusOK, toUserResponse(currentUser, termsAccepted))
 }
 
 // ResolveAuthenticatedUserIdentifier reads and validates the session cookie. It is exported so
@@ -254,7 +264,8 @@ func (handler *AuthHandler) issueSessionAndRespond(responseWriter http.ResponseW
 		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not start a session.")
 		return
 	}
-	writeJSON(responseWriter, http.StatusOK, toUserResponse(user))
+	termsAccepted := termsAcceptedFor(request.Context(), handler.AgreementService, user.Identifier)
+	writeJSON(responseWriter, http.StatusOK, toUserResponse(user, termsAccepted))
 }
 
 // issueSessionCookie creates a session for the user and writes the session cookie. Callers decide
@@ -802,7 +813,7 @@ func (handler *AuthHandler) writeRegistrationError(responseWriter http.ResponseW
 	}
 }
 
-func toUserResponse(user *domain.User) userResponsePayload {
+func toUserResponse(user *domain.User, termsAccepted bool) userResponsePayload {
 	avatarURL := ""
 	if trimmedAvatar := strings.TrimSpace(user.AvatarURL); trimmedAvatar != "" {
 		// The proxy path is identical for every user, and the response is cacheable
@@ -823,8 +834,46 @@ func toUserResponse(user *domain.User) userResponsePayload {
 		IsAdmin:         user.IsAdmin,
 		EmailVerified:   user.IsEmailVerified(),
 		CreatedAt:       user.CreatedAt.Format(time.RFC3339),
+		TermsAccepted:   termsAccepted,
+		TermsVersion:    domain.CurrentAgreementVersion,
 		AvatarURL:       avatarURL,
 	}
+}
+
+// termsAcceptedFor returns whether the user has accepted the current legal documents. It fails CLOSED
+// (returns false on a missing service or a read error) so a consent gap can never be silently skipped:
+// the worst case is the user is asked to accept again, never that an un-consented user slips through.
+func termsAcceptedFor(operationContext context.Context, agreementService *service.AgreementService, userIdentifier int64) bool {
+	if agreementService == nil {
+		return false
+	}
+	accepted, lookupError := agreementService.HasAcceptedCurrent(operationContext, userIdentifier)
+	if lookupError != nil {
+		log.Printf("terms: could not check acceptance for user %d: %v", userIdentifier, lookupError)
+		return false
+	}
+	return accepted
+}
+
+// enforceAgreementAccepted writes 403 (code terms_not_accepted) unless the user has accepted the
+// current Terms of Use + Privacy Policy. Mirrors enforceEmailVerified; used to block money/robot
+// actions until consent is on record (defense in depth behind the SPA's blocking gate).
+func enforceAgreementAccepted(operationContext context.Context, responseWriter http.ResponseWriter, agreementService *service.AgreementService, userIdentifier int64) bool {
+	if termsAcceptedFor(operationContext, agreementService, userIdentifier) {
+		return true
+	}
+	writeJSONErrorCode(responseWriter, http.StatusForbidden, "Please accept the Terms of Use and Privacy Policy to continue.", "terms_not_accepted")
+	return false
+}
+
+// enforceVerifiedAndAgreed gates a money/robot action behind BOTH a confirmed email and acceptance of
+// the current Terms of Use + Privacy Policy. It writes the matching 403 (email_unverified or
+// terms_not_accepted) and returns false on the first failed check.
+func enforceVerifiedAndAgreed(operationContext context.Context, responseWriter http.ResponseWriter, authService *service.AuthService, agreementService *service.AgreementService, userIdentifier int64) bool {
+	if !enforceEmailVerified(operationContext, responseWriter, authService, userIdentifier) {
+		return false
+	}
+	return enforceAgreementAccepted(operationContext, responseWriter, agreementService, userIdentifier)
 }
 
 func writeJSON(responseWriter http.ResponseWriter, statusCode int, payload interface{}) {
