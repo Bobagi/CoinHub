@@ -175,13 +175,7 @@ button.danger, .btn-danger { background: linear-gradient(120deg, #ff5a5f, #c92a2
 .badge.amber { background: rgba(250, 176, 5, 0.18); color: var(--amber); }
 .badge.blue { background: rgba(116, 192, 252, 0.18); color: #74c0fc; }
 
-/* Collapsible "How it works" help blocks. */
-.help { margin-top: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-2); padding: 0 var(--space-3); }
-.help > summary { cursor: pointer; padding: var(--space-3) 0; font-weight: 700; font-size: var(--text-xs); color: var(--brand); list-style: none; }
-.help > summary::-webkit-details-marker { display: none; }
-.help > summary::before { content: '＋ '; }
-.help[open] > summary::before { content: '－ '; }
-.help p { margin: 0 0 var(--space-3); color: var(--muted); font-size: var(--text-sm); line-height: 1.55; }
+/* Collapsible "how it works" / section disclosures live in Collapsible.svelte (single source). */
 
 /* Generic dropdown menu surface, reused by the language picker and account menu. */
 .menu {

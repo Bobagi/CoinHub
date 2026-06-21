@@ -4,6 +4,7 @@
   import { t } from './i18n'
   import { notifyError } from './stores'
   import Pagination from './Pagination.svelte'
+  import Collapsible from './Collapsible.svelte'
 
   type AssetTable = { table_name: string; header: string[]; rows: string[][]; error?: string }
 
@@ -79,7 +80,7 @@
     <span class="card-title">{$t('portfolio.title')}</span>
     <span class="card-subtitle">{$t('portfolio.subtitle')}</span>
   </div>
-  <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('portfolio.help')}</p></details>
+  <Collapsible variant="help" title={$t('help.summary')}><p>{$t('portfolio.help')}</p></Collapsible>
 
   <input class="mt-4" bind:value={walletUrl} placeholder={$t('portfolio.placeholder')} />
   <div class="actions">

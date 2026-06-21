@@ -10,6 +10,7 @@
   import SymbolAutocomplete from './SymbolAutocomplete.svelte'
   import LockOverlay from './LockOverlay.svelte'
   import Pagination from './Pagination.svelte'
+  import Collapsible from './Collapsible.svelte'
 
   let activeTab: 'connection' | 'trade' | 'b3' = 'trade'
   let opsView: 'positions' | 'history' = 'positions'
@@ -575,19 +576,15 @@
 <main class="page stack-lg">
   {#if loadingError}<div class="card error">{loadingError}</div>{/if}
 
-  <details class="card start" open>
-    <summary>
-      <span class="start-caret">▸</span>
-      <span class="start-title">{$t('start.title')}</span>
-    </summary>
+  <Collapsible variant="section" open title={$t('start.title')}>
     <p class="muted mt-3">{$t('start.intro')}</p>
-    <ol>
+    <ol class="steps">
       <li>{$t('start.s1')}</li>
       <li>{$t('start.s2')}</li>
       <li>{$t('start.s3')}</li>
       <li>{$t('start.s4')}</li>
     </ol>
-  </details>
+  </Collapsible>
 
   <div class="tabs" role="tablist">
     <button class="tab" role="tab" aria-selected={activeTab === 'trade'} class:active={activeTab === 'trade'} on:click={() => (activeTab = 'trade')}>
@@ -605,7 +602,7 @@
         <span class="card-title">{$t('binance.title')}</span>
         <span class="card-subtitle">{$t('binance.subtitle')}</span>
       </div>
-      <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('binance.help')}</p></details>
+      <Collapsible variant="help" title={$t('help.summary')}><p>{$t('binance.help')}</p></Collapsible>
 
       <div class="field">
         <span class="field-label">{$t('binance.activeEnv')}</span>
@@ -690,7 +687,7 @@
           <span class="card-title">{$t('buy.title')}</span>
           <span class="card-subtitle">{$t('buy.subtitle')}</span>
         </div>
-        <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('buy.help')}</p></details>
+        <Collapsible variant="help" title={$t('help.summary')}><p>{$t('buy.help')}</p></Collapsible>
         <div class="field">
           <label for="trade-symbol">{$t('buy.pair')}</label>
           <SymbolAutocomplete id="trade-symbol" bind:value={tradeSymbol} options={symbols} placeholder="BTCUSDT" on:select={checkPrice} on:commit={checkPrice} />
@@ -724,7 +721,7 @@
             <span class="card-subtitle">{$t('robots.subtitle')}</span>
           </div>
         </div>
-        <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('robots.help')}</p></details>
+        <Collapsible variant="help" title={$t('help.summary')}><p>{$t('robots.help')}</p></Collapsible>
         <p class="muted">{isAdmin ? $t('robots.planAdmin') : $t('robots.planStandard', { n: robotLimit })}</p>
         {#if selectedRobot && robotDraft}
           <button class="btn-sm ghost robot-nav-btn" on:click={backToRobotList}>{$t('robots.back')}</button>
@@ -849,11 +846,7 @@
       </section>
     </div>
 
-    <details class="card alloc-card" open>
-      <summary class="alloc-summary">
-        <span class="start-caret">▸</span>
-        <span class="card-title">{$t('alloc.section')}</span>
-      </summary>
+    <Collapsible variant="section" open title={$t('alloc.section')}>
 
       <div class="subtabs mt-4">
         <button class="subtab" class:active={allocView === 'allocation'} on:click={() => (allocView = 'allocation')}>{$t('alloc.tabAllocation')}</button>
@@ -861,10 +854,10 @@
       </div>
 
       {#if allocView === 'allocation'}
-        <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('alloc.help')}</p></details>
+        <Collapsible variant="help" title={$t('help.summary')}><p>{$t('alloc.help')}</p></Collapsible>
         <AllocationPanel {operations} />
       {:else}
-        <details class="help"><summary>{$t('help.summary')}</summary><p>{$t('prof.help')}</p></details>
+        <Collapsible variant="help" title={$t('help.summary')}><p>{$t('prof.help')}</p></Collapsible>
         {#if !hasProfitData}
           <p class="muted mt-3">{$t('prof.none')}</p>
         {:else}
@@ -898,7 +891,7 @@
           </div>
         {/if}
       {/if}
-    </details>
+    </Collapsible>
 
     <section class="card">
       <div class="card-header">
@@ -910,12 +903,11 @@
       </div>
 
       {#if opsView === 'positions'}
-        <details class="help">
-          <summary>{$t('ops.statusHelp')}</summary>
+        <Collapsible variant="help" title={$t('ops.statusHelp')}>
           <p>{$t('ops.openMeaning')}</p>
           <p>{$t('ops.soldMeaning')}</p>
           <p>{$t('ops.sellOrderMeaning')}</p>
-        </details>
+        </Collapsible>
         {#if hasSoldPositions}
           <label class="show-sold mt-3">
             <input type="checkbox" checked={showSoldPositions} on:change={toggleShowSold} />
@@ -1043,12 +1035,7 @@
 <style>
   .danger-zone { display: flex; flex-direction: column; gap: var(--space-1); padding-top: var(--space-4); border-top: 1px solid var(--border); }
   .danger-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
-  .start summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--space-2); }
-  .start summary::-webkit-details-marker { display: none; }
-  .start-caret { color: var(--brand); display: inline-block; transition: transform 0.15s ease; }
-  .start[open] .start-caret { transform: rotate(90deg); }
-  .start-title { font-size: var(--text-md); font-weight: 800; }
-  .start ol { margin: var(--space-3) 0 0; padding-left: var(--space-5); line-height: 1.8; color: var(--text); }
+  .steps { margin: var(--space-3) 0 0; padding-left: var(--space-5); line-height: 1.8; color: var(--text); }
 
   .tabs { display: flex; gap: var(--space-2); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   .tab { background: transparent; border: none; border-bottom: 2px solid transparent; border-radius: 0; color: var(--muted); font-weight: 700; height: auto; padding: var(--space-3) var(--space-4); }
@@ -1102,9 +1089,6 @@
   .switch input:disabled + .slider { opacity: .6; cursor: default; }
   .switch input:focus-visible + .slider { outline: 2px solid var(--brand); outline-offset: 2px; }
 
-  .alloc-card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: var(--space-2); }
-  .alloc-card > summary::-webkit-details-marker { display: none; }
-  .alloc-card[open] > summary .start-caret { transform: rotate(90deg); }
   .prof-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-3); }
   .prof-card { display: flex; flex-direction: column; gap: 2px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); }
   .prof-label { color: var(--muted); font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
