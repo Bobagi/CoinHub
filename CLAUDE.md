@@ -379,9 +379,12 @@ the front, kept on purpose because the donut/profitability need the full set (do
   `.card-header:has(+ .collapsible.help){margin-bottom:var(--space-3)}` tightens all four cards
   (Connection/Buy/Robots/Portfolio) to a consistent 12px. The Robots card's uneven steps were normalized
   (plan note `mt-3`, `.robot-nav-btn` bottom `space-4`→`space-3`).
-- **Mobile robot rows.** `.robot-row` was a no-wrap flex row → it overflowed past the card on phones. Now
-  `flex-wrap:wrap` (grows vertically) + on `<600px` the desktop `flex:1` spacer is hidden and `.robot-open`
-  gets `margin-left:auto` → clean 2-line layout. Same `flex-wrap` safety added to `.bot-head`.
+- **Mobile robot rows.** `.robot-row` was a no-wrap flex row → it overflowed past the card on phones.
+  Desktop keeps the flex layout (`flex-wrap:wrap` safety); on `<600px` the row becomes a **3-zone grid**
+  (`grid-template-columns:1fr auto 1fr`) so items are distributed, not bunched left: **badge left / name
+  centered / pair (symbol) right** on row 1, **DCA left / "Abrir →" right** on row 2 (the desktop `flex:1`
+  spacer is hidden in grid). Same `flex-wrap` safety on `.bot-head`. Verified at 390px via an isolated mock
+  screenshotted with the `frontend-review` capture engine (the rows are behind auth).
 - **`frontend-review` skill sharpened** (repo `Bobagi/claude-skills`, pushed): promoted two general lessons
   into the rubric + SKILL mandate — (1) trace adjacent-sibling **margin stacking/collapse** as the usual
   cause of uneven rhythm; (2) **verify responsiveness in code** (grep flex rows for `flex-wrap`/reflow; a

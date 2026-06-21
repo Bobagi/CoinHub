@@ -1075,10 +1075,16 @@
   .robot-name { font-weight: 700; }
   .robot-sym, .robot-dca { font-size: var(--text-xs); }
   .robot-open { color: var(--brand); font-weight: 700; font-size: var(--text-xs); white-space: nowrap; }
-  /* Mobile: rows grow vertically (wrap to a 2nd line) instead of overflowing the card. */
+  /* Mobile: a balanced 3-zone grid — badge left, name centered, pair right (row 1);
+     DCA left, "Abrir →" right (row 2) — instead of everything bunched against the left edge. */
   @media (max-width: 600px) {
+    .robot-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; column-gap: var(--space-2); row-gap: var(--space-1); }
     .robot-row .spacer { display: none; }
-    .robot-row .robot-open { margin-left: auto; }
+    .robot-row .badge { grid-row: 1; grid-column: 1; justify-self: start; }
+    .robot-row .robot-name { grid-row: 1; grid-column: 2; justify-self: center; text-align: center; }
+    .robot-row .robot-sym { grid-row: 1; grid-column: 3; justify-self: end; }
+    .robot-row .robot-dca { grid-row: 2; grid-column: 1 / 3; justify-self: start; }
+    .robot-row .robot-open { grid-row: 2; grid-column: 3; justify-self: end; }
   }
   .live-panel { border-top: 1px solid var(--border); padding-top: var(--space-4); margin-top: var(--space-4); }
   .live-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
