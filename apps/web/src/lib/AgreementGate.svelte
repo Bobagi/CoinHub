@@ -14,8 +14,13 @@
   function openTerms() { navigate('terms') }
   function openPrivacy() { navigate('privacy') }
 
-  let agreed = false
+  // Three separate affirmations, all required, recorded together as one acceptance.
+  let agreedAge = false
+  let agreedTerms = false
+  let agreedPrivacy = false
   let busy = false
+
+  $: allAgreed = agreedAge && agreedTerms && agreedPrivacy
 
   // The legal document is rendered as an ordered list of titled sections; each maps to an i18n key
   // pair (title/body) so the whole text is translated per locale.
@@ -25,7 +30,7 @@
   ]
 
   async function accept() {
-    if (!agreed || busy) return
+    if (!allAgreed || busy) return
     busy = true
     try {
       const user = await api.acceptAgreement()
@@ -75,12 +80,22 @@
       {/each}
     </div>
 
-    <label class="accept-row">
-      <input type="checkbox" bind:checked={agreed} />
-      <span>{$t('agreement.checkbox')}</span>
-    </label>
+    <div class="accept-list">
+      <label class="accept-row">
+        <input type="checkbox" bind:checked={agreedAge} />
+        <span>{$t('agreement.checkboxAge')}</span>
+      </label>
+      <label class="accept-row">
+        <input type="checkbox" bind:checked={agreedTerms} />
+        <span>{$t('agreement.checkboxTerms')}</span>
+      </label>
+      <label class="accept-row">
+        <input type="checkbox" bind:checked={agreedPrivacy} />
+        <span>{$t('agreement.checkboxPrivacy')}</span>
+      </label>
+    </div>
 
-    <button class="btn-primary btn-block mt-4" disabled={!agreed || busy} on:click={accept}>
+    <button class="btn-primary btn-block mt-4" disabled={!allAgreed || busy} on:click={accept}>
       {busy ? $t('agreement.saving') : $t('agreement.accept')}
     </button>
     <button type="button" class="link-btn decline" disabled={busy} on:click={declineAndSignOut}>
@@ -113,7 +128,8 @@
   .doc-section + .doc-section { margin-top: var(--space-4); }
   .doc-section h2 { font-size: var(--text-sm); font-weight: 800; color: var(--brand-soft); }
   .doc-section p { margin-top: var(--space-2); color: var(--muted); font-size: var(--text-sm); line-height: 1.6; }
-  .accept-row { display: flex; align-items: flex-start; gap: var(--space-3); margin-top: var(--space-4); font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
+  .accept-list { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
+  .accept-row { display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
   .accept-row input { margin-top: 3px; flex: none; }
   .decline { display: block; margin: var(--space-3) auto 0; background: transparent; border: none; color: var(--muted); font-size: var(--text-sm); cursor: pointer; min-height: 24px; }
   .decline:hover:not(:disabled) { text-decoration: underline; color: var(--text); }
