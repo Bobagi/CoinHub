@@ -145,10 +145,18 @@ export function navigate(to: Route) {
   const hash = routeHashes[to] ?? '#/'
   if (typeof location !== 'undefined' && location.hash !== hash) location.hash = hash
   route.set(to)
+  scrollToTop()
+}
+
+// Each route is a distinct top-level page (terms, privacy, account, …); always start it at the top
+// rather than inheriting the previous page's scroll position.
+function scrollToTop() {
+  if (typeof window !== 'undefined') window.scrollTo(0, 0)
 }
 
 if (typeof window !== 'undefined') {
-  window.addEventListener('hashchange', () => route.set(routeFromHash()))
+  // Covers in-app navigate() AND browser back/forward / direct hash edits.
+  window.addEventListener('hashchange', () => { route.set(routeFromHash()); scrollToTop() })
 }
 
 // --- Cookie / advertising consent (LGPD) -------------------------------------------------------
