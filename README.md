@@ -67,20 +67,45 @@ stop-loss). The robot reviews open positions about every 30 seconds.
 > Standard accounts get **1 robot per environment**; admins get unlimited (a monetization hook —
 > billing isn't built yet).
 
+## Accounts, security & legal
+
+- **Sign-in:** email + password (bcrypt) **or Google sign-in**. Email **verification is enforced** —
+  unverified accounts can browse but every save (connect Binance, trade, robots) is blocked. Password
+  reset + email verification go out over Gmail SMTP. Sessions are opaque tokens in a Secure httpOnly
+  cookie; only the SHA-256 hash is stored. Money actions require a fresh **step-up ("sudo") re-auth**.
+- **Consent (Terms of Use + Privacy Policy):** a new account must **accept the Terms + Privacy** before
+  using anything — a blocking gate, with the acceptance **recorded server-side** (version, timestamp,
+  IP, user-agent). The version is bumped when the text changes materially, forcing re-acceptance. The
+  full documents are public and permanent at `#/terms` and `#/privacy`; the account page shows which
+  version you accepted and when. The API also refuses money/robot actions without an on-record
+  acceptance (`403 terms_not_accepted`).
+- **Your data & privacy (LGPD-aligned):** Binance API keys are encrypted at rest (AES-256-GCM) and used
+  only to place the orders you configure — **use trade-only keys with withdrawals disabled**. Account
+  deletion is a **privacy-preserving hard delete** (PII + keys erased; only a non-identifying HMAC audit
+  row remains). A durable **sign-in/access log** (IP + offline city geolocation + device) powers
+  new-device email alerts. See the full Privacy Policy in-app and the risk/compliance review in
+  [`legal-audit-2026-06-21.md`](legal-audit-2026-06-21.md).
+- **Not custodial, not advice:** Coin Hub never holds or can withdraw your funds; it is software you
+  configure, **not** a broker, fund manager or investment adviser, and is not affiliated with Binance.
+
 ## Architecture
 
 ```
-coin.bobagi.space ──nginx(TLS)──▶ web (SvelteKit, Phase 4) ──▶ api (Go) ──▶ Postgres
+coin.bobagi.space ──nginx(TLS)──▶ web (Svelte+Vite SPA, static dist/) 
+                            └────▶ api (Go, 127.0.0.1:5020) ──▶ Postgres (internal)
                                                                    │
                                                                    └─▶ scraper (Python/Flask + Selenium)
 ```
 
+nginx serves the SPA's static `dist/` directly and reverse-proxies `/api`,`/auth`,`/health` to the Go
+API on `127.0.0.1:5020`. The DB has no host port (internal only).
+
 | Path          | Service   | Stack                      | Role |
 |---------------|-----------|----------------------------|------|
-| `apps/api`    | `api`     | Go (SOLID, single binary)  | Trading engine + REST API + auth (core) |
+| `apps/api`    | `api`     | Go (SOLID, single binary, distroless) | Trading engine + REST API + auth (core) |
 | `apps/scraper`| `scraper` | Python 3.11 / Flask + Selenium | Scrapes Investidor10 wallets (internal-only service) |
-| `apps/web`    | `web`     | SvelteKit (Phase 4)        | Dashboard SPA with real charts |
-| `migrations`  | `migrate` | golang-migrate SQL         | Versioned DB schema |
+| `apps/web`    | `web`     | Svelte 4 + Vite + TypeScript (static SPA) | Dashboard SPA with real charts; built to `dist/`, served by nginx |
+| `migrations`  | `migrate` | golang-migrate SQL         | Versioned DB schema (0001..00NN) |
 | `deploy`      | —         | nginx vhost reference      | Ops reference |
 
 ## Local development
@@ -95,18 +120,40 @@ docker compose up --build     # db + migrate + scraper + api
 Apply a new migration: add `NNNN_name.up.sql` / `.down.sql` under `migrations/`, then
 `docker compose up migrate`.
 
-## Roadmap (tracked in the task list)
+## Status
 
-0. **Monorepo unification** — single repo, one compose. *(done)*
-1. **Multi-user core** — users + auth, per-user encrypted Binance keys, user-scoped data.
-2. **Trading hardening** — stop-loss + risk caps, WebSocket fills/price for fast reaction.
-3. **Portfolio integration** — API calls the scraper; per-user wallet + caching.
-4. **SvelteKit frontend** — auth UI, dashboards, and proper charts.
-5. **Deploy** — ship to coin.bobagi.space, reset DB, decommission old containers/repo.
+**Live today** at https://coin.bobagi.space: monorepo + compose; multi-user auth (email + Google,
+enforced email verification, password reset, step-up re-auth, access/sign-in history); per-user
+encrypted Binance credentials with testnet/production isolation; manual buy + take-profit + manual
+close; **trading robots** (per-coin DCA + take-profit + optional stop-loss) run by a single-process
+automation worker; the Svelte SPA with the design system, real charts (allocation donut, price/profit
+history), pagination, toasts and trilingual i18n; the B3/Investidor10 portfolio (admin-only); the
+**Terms + Privacy consent gate** with public legal pages; and a privacy-preserving account deletion.
+
+### To do / to fix (engineering — see `CLAUDE.md` "TODO / backlog" for the full list)
+- **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history; rotation
+  still pending (do **not** rotate `CREDENTIALS_ENCRYPTION_KEY` without a re-encrypt migration).
+- **WebSocket user-data + market-price streams** — replace the 30s REST polling; the real fix for the
+  per-IP Binance rate limit as the user base grows.
+- **Leader lock** before running >1 API replica (the worker would otherwise double-execute).
+- Real server-side pagination for Positions/History; drop the vestigial
+  `trading_robots.daily_purchase_enabled` column; remove dead legacy single-user services.
+
+### Future plans
+- **Monetization:** paid robots beyond the free tier (standard users are capped at 1 robot/env today)
+  + advertising — both need the items in `legal-audit-2026-06-21.md` first (a billing/subscription
+  system with a 7-day-withdrawal cancel/refund flow, a cookie-consent banner — already built and
+  dormant behind `stores.adsEnabled` — and the legal/fiscal setup below).
+- **2FA (TOTP)**, per-user email price alerts, more charts (PnL over time, dividend calendar).
+- **Operator/legal (not code):** lawyer review + a CVM opinion on the paid robot, a CNPJ + invoicing,
+  and AdSense eligibility — tracked with status in `legal-audit-2026-06-21.md` §3/§3a.
 
 ## Security posture
 
 - Per-user Binance secrets are encrypted at rest (AES-256-GCM) and never logged.
 - Use **trade-only** Binance API keys (withdrawals disabled).
 - New users start on **Binance Testnet**; live trading requires explicit opt-in.
-- Automated trading carries real financial risk; risk controls (stop-loss, caps) are built in.
+- Automated trading carries real financial risk; risk controls (stop-loss, per-order + per-robot caps)
+  are built in. Returns are never guaranteed.
+- See **Accounts, security & legal** above and [`legal-audit-2026-06-21.md`](legal-audit-2026-06-21.md)
+  for the full security/compliance picture and the operator action list.

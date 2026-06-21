@@ -1,50 +1,46 @@
-# Coin Alert (Go)
+# apps/api — Coin Hub backend (Go)
 
-Web dashboard to log cryptocurrency trades, validate Binance API credentials, and send email alerts, rewritten in Go following SOLID boundaries.
+The core of Coin Hub: a multi-user **JSON REST API + trading engine + auth**, one Go binary
+(module `coin-hub`), built **distroless**. It serves no HTML — the UI is the Svelte SPA in
+`apps/web`; this process only speaks JSON (cookie session) and runs the automation worker. nginx
+fronts it on `127.0.0.1:5020`. (Formerly "Coin Alert", a single-user template-rendered app — the
+legacy `server.go` + `templates/` were removed in the 2026-06 hardening pass.)
 
-## Overview
-- API and dashboard served by a single Go binary.
-- PostgreSQL stores trades, email alerts, and Binance credentials.
-- Internal automation services for scheduled buy/sell intervals.
-- Docker Compose with one application container and one PostgreSQL container.
-
-## Environment variables
-Copy `.env.example` to `.env` and adjust the values to match your environment (database credentials, SMTP, Binance keys, and scheduler intervals).
-
-## Running with Docker
-1. Build and start the containers:
-   ```
-   docker compose up --build
-   ```
-2. Open `http://localhost:${API_PORT:-5020}` (or the port configured in `API_PORT`) to access the dashboard.
-
-Database migrations run in the separate `migrate` service before the application starts, keeping schema creation and evolution out of the application runtime.
-
-### Updating database credentials after data already exists
-If you change `DB_USER` or `DB_PASSWORD` after the `db_data` volume already exists, PostgreSQL will keep the original credentials stored in the volume. To apply new credentials, remove the volume before starting again:
-
+## Build & test (Go is not in PATH — use Docker)
+```bash
+# from apps/api
+docker run --rm -v "$PWD":/app -w /app -e GOTOOLCHAIN=local golang:1.22-alpine \
+  sh -c "go build ./... && go vet ./..."
 ```
-docker compose down -v
-docker compose up --build
-```
+`golang.org/x/crypto` is pinned to v0.31.0 (newer needs Go ≥1.25). Run/deploy via the repo-root
+`docker compose` (db + migrate + api) or `./deploy.sh api`. Migrations run in the separate `migrate`
+service before the app starts. Config is env-only (see repo-root `.env.example`); a missing
+`CREDENTIALS_ENCRYPTION_KEY` disables credential storage, unset `GOOGLE_OAUTH_*`/`SMTP_*` disable
+those features.
 
-Alternatively, keep the same credentials used during the first database initialization.
+## Layout (`internal/`)
+- `config` — env loading. `database` — Postgres connector (bounded pool). `domain` — structs/constants.
+- `repository` — Postgres persistence; **everything is user-scoped** (`WHERE user_id = $1`).
+- `service` — business logic: auth (bcrypt + opaque hashed sessions, step-up re-auth), Google OAuth,
+  transactional email (`internal/email`), `UserCredentialService` (per-user Binance keys, AES-256-GCM
+  at rest), `UserTradingService` (market buy + take-profit limit sell), `RobotService`,
+  `AutomationWorker` (per-user reconcile + stop-loss + daily DCA, 30s/5min loops, single process),
+  `AccessLogService` (+ offline `internal/geoip`), `AgreementService` (Terms/Privacy consent), shared
+  Binance price cache + rate-limit gate.
+- `httpserver` — JSON handlers: `auth_handler` (email + Google, password reset, email verify, step-up),
+  `account_handler` (profile/password/delete/avatar/access-log/agreement), `api_handler`
+  (settings/credentials/price/symbols), `operations_handler`, `robots_handler`, `portfolio_handler`.
+  Money/robot endpoints are gated by `enforceVerifiedAndAgreed` (verified email **and** accepted Terms).
 
-## Project structure
-- `cmd/server`: application entrypoint.
-- `internal/config`: environment configuration loading.
-- `internal/database`: PostgreSQL connector and connection lifecycle.
-- `internal/domain`: domain models.
-- `internal/repository`: PostgreSQL persistence.
-- `internal/service`: business rules and automation services.
-- `internal/httpserver`: HTTP handlers and template rendering.
-- `migrations`: versioned database migrations executed by the `migrate` service.
-- `templates`: HTML/CSS dashboard.
+## What it does today
+- **Multi-user auth:** email + password and **Google sign-in**; enforced email verification; password
+  reset; new-device access log + alert emails; step-up ("sudo") re-auth for money actions.
+- **Consent:** records server-side acceptance of the versioned Terms+Privacy (`user_agreement_acceptances`,
+  migration 0027) and refuses money/robot actions without it.
+- **Trading:** per-user encrypted Binance credentials with **testnet/production isolation**; manual buy
+  + take-profit + manual close; **robots** (per-coin DCA + take-profit + optional stop-loss) executed by
+  the automation worker; per-order + per-robot spending caps; only successful executions logged to history.
+- **Portfolio:** proxies the Python scraper for the Investidor10 wallet (admin-gated).
 
-## Features
-- Unified trading operations: purchase, monitor profit target, and mark as sold in a single log.
-- Capital threshold enforcement for the configured trading pair with automatic sell monitoring.
-- List recent operations with purchase and sell details.
-- Send authenticated SMTP email alerts with persistence.
-- Scheduled operations persisted for visibility, including the next predicted action and manual "execute now" trigger.
-- Execution history recorded for every automated attempt with success and error details.
+See the repo-root `CLAUDE.md` for the full API surface, the worker concurrency model (do **not** run >1
+replica without a leader lock), the Binance per-IP rate-limit notes, and the backlog.

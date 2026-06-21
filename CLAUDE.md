@@ -505,8 +505,15 @@ help text. **Be precise: say what we do AND what we don't.**
 6. **More charts** — PnL over time, dividend calendar, etc.
 7. **Remove the now-unwired legacy single-user *services*** (`server.go` + `templates/` already deleted;
    the old single-user services they used remain as dead code).
-8. **Robot monetization** — standard users are capped at 1 robot/environment
-   (`StandardUserRobotLimitPerEnvironment`), admins unlimited; the payment/billing piece is not built.
+8. **Robot monetization + advertising** — standard users are capped at 1 robot/environment
+   (`StandardUserRobotLimitPerEnvironment`), admins unlimited. **Not built:** the billing/subscription
+   system itself, including a **cancel/refund flow honoring the 7-day CDC art.49 withdrawal** (the
+   *right* is already stated in the Terms). Ads: the **cookie-consent banner is built but dormant**
+   (`CookieConsent.svelte` + `stores.adsEnabled=false`) — to enable ads, flip `adsEnabled` and gate the
+   ad/analytics script on `cookieConsent==='accepted'`. **Operator/legal prerequisites before charging
+   or running ads** (can't be done in code): lawyer review + a **CVM "is the paid robot administração de
+   carteira?" opinion**, a **CNPJ + invoicing**, and **AdSense eligibility** (crypto is restricted). All
+   tracked with status in `legal-audit-2026-06-21.md` §3/§3a.
 9. **Real server-side pagination for Positions + History** — both currently load the FULL set
    (`getOperations`/`getExecutions`) and slice client-side (`Pagination.svelte` is front-only). This is
    **intentional today**: AllocationPanel + ProfitabilityPanel aggregate over all operations/executions on
@@ -520,7 +527,10 @@ help text. **Be precise: say what we do AND what we don't.**
    hygiene). Safe to remove in a later additive migration once nothing references it.
 
 *(Done 2026-06: surfaced the per-order cap in the UI + rebuilt the per-robot max-invested ceiling —
-migration 0023. See "Trading strategy, terminology & spending caps".)*
+migration 0023. Also: **DB-backed Terms+Privacy consent** (migration 0027, versioned + server-enforced),
+**public `#/terms` + `#/privacy` pages** + full LGPD Privacy Policy, the **avatar cache-key fix**, and a
+**legal/risk audit** (`legal-audit-2026-06-21.md`). See the 2026-06-21 session notes above + "Trading
+strategy, terminology & spending caps".)*
 
 ## Don't print secrets
 `.env`, `/root/commands_band_share.txt`, and any API keys. Never echo/commit them.
