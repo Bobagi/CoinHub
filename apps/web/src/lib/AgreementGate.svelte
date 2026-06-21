@@ -87,11 +87,11 @@
       </label>
       <label class="accept-row">
         <input type="checkbox" bind:checked={agreedTerms} />
-        <span>{$t('agreement.checkboxTerms')}</span>
+        <span>{$t('agreement.checkboxTermsPre')} <button type="button" class="inline-link" on:click|stopPropagation={openTerms}>{$t('legal.viewTerms')}</button>.</span>
       </label>
       <label class="accept-row">
         <input type="checkbox" bind:checked={agreedPrivacy} />
-        <span>{$t('agreement.checkboxPrivacy')}</span>
+        <span>{$t('agreement.checkboxPrivacyPre')} <button type="button" class="inline-link" on:click|stopPropagation={openPrivacy}>{$t('legal.viewPrivacy')}</button>.</span>
       </label>
     </div>
 
@@ -128,8 +128,11 @@
   .doc-section + .doc-section { margin-top: var(--space-4); }
   .doc-section h2 { font-size: var(--text-sm); font-weight: 800; color: var(--brand-soft); }
   .doc-section p { margin-top: var(--space-2); color: var(--muted); font-size: var(--text-sm); line-height: 1.6; }
-  .accept-list { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-3); }
-  .accept-row { display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
+  .accept-list { margin-top: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+  /* margin:0 overrides the global `label { margin: ... }` rule, which would otherwise stack ~36px between rows. */
+  .accept-row { margin: 0; display: flex; align-items: flex-start; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.5; cursor: pointer; }
+  .inline-link { background: transparent; border: none; padding: 0; min-height: 0; font: inherit; color: var(--brand); font-weight: 700; text-decoration: underline; cursor: pointer; }
+  .inline-link:hover { color: var(--brand-soft); }
   .accept-row input { margin-top: 3px; flex: none; }
   .decline { display: block; margin: var(--space-3) auto 0; background: transparent; border: none; color: var(--muted); font-size: var(--text-sm); cursor: pointer; min-height: 24px; }
   .decline:hover:not(:disabled) { text-decoration: underline; color: var(--text); }
