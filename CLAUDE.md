@@ -367,6 +367,27 @@ worker now gates on `IsEnabled && CapitalThreshold>0` (see backlog #10 re the ve
 the front, kept on purpose because the donut/profitability need the full set (documented in `Dashboard.svelte`
 + backlog #9). The B3 tables get one scraper payload (client paging is fine).
 
+### 2026-06-21 session (unified spoilers + spacing rhythm + mobile robot rows)
+- **One reusable disclosure: `apps/web/src/lib/Collapsible.svelte`.** The app had three different
+  "spoiler" styles — the section cards (Primeiros passos / Posições & performance) used a rotating gold
+  `▸` caret, the ~7 "Como funciona" `.help` boxes used a `＋/－` marker, and the footer Terms used the
+  browser's default triangle. All 10 now route through `<Collapsible variant="section|help" title open>`:
+  one rotating `▸` caret, gold, consistent type. The global `.help` CSS + the dead `.start*`/`.alloc-card`
+  summary rules were removed. **Use `<Collapsible>` for any new collapsible — don't hand-roll `<details>`.**
+- **Even vertical rhythm.** A `.help` directly under a `.card-header` doubled the header→content gap (the
+  header's `margin-bottom` collapsing with the help's `margin-top`); a global
+  `.card-header:has(+ .collapsible.help){margin-bottom:var(--space-3)}` tightens all four cards
+  (Connection/Buy/Robots/Portfolio) to a consistent 12px. The Robots card's uneven steps were normalized
+  (plan note `mt-3`, `.robot-nav-btn` bottom `space-4`→`space-3`).
+- **Mobile robot rows.** `.robot-row` was a no-wrap flex row → it overflowed past the card on phones. Now
+  `flex-wrap:wrap` (grows vertically) + on `<600px` the desktop `flex:1` spacer is hidden and `.robot-open`
+  gets `margin-left:auto` → clean 2-line layout. Same `flex-wrap` safety added to `.bot-head`.
+- **`frontend-review` skill sharpened** (repo `Bobagi/claude-skills`, pushed): promoted two general lessons
+  into the rubric + SKILL mandate — (1) trace adjacent-sibling **margin stacking/collapse** as the usual
+  cause of uneven rhythm; (2) **verify responsiveness in code** (grep flex rows for `flex-wrap`/reflow; a
+  no-wrap flex row with fixed-width children overflows on mobile). Every review must include a mobile
+  viewport AND this code pass.
+
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
 help text. **Be precise: say what we do AND what we don't.**
