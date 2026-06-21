@@ -3,7 +3,9 @@ package httpserver
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log"
@@ -802,8 +804,15 @@ func (handler *AuthHandler) writeRegistrationError(responseWriter http.ResponseW
 
 func toUserResponse(user *domain.User) userResponsePayload {
 	avatarURL := ""
-	if strings.TrimSpace(user.AvatarURL) != "" {
-		avatarURL = "/api/v1/account/avatar"
+	if trimmedAvatar := strings.TrimSpace(user.AvatarURL); trimmedAvatar != "" {
+		// The proxy path is identical for every user, and the response is cacheable
+		// (Cache-Control: private, max-age). Without a per-picture cache key the browser would keep
+		// serving a previously cached avatar after switching accounts (sign out + sign in as someone
+		// else) — even on reload, since reloads don't refetch cached images. Append a stable hash of
+		// the upstream Google picture URL so each distinct picture is a distinct cacheable resource
+		// (and a rotated Google URL naturally busts the cache for the same user).
+		digest := sha256.Sum256([]byte(trimmedAvatar))
+		avatarURL = "/api/v1/account/avatar?v=" + hex.EncodeToString(digest[:])[:12]
 	}
 	return userResponsePayload{
 		Identifier:      user.Identifier,
