@@ -722,7 +722,7 @@
           </div>
         </div>
         <Collapsible variant="help" title={$t('help.summary')}><p>{$t('robots.help')}</p></Collapsible>
-        <p class="muted">{isAdmin ? $t('robots.planAdmin') : $t('robots.planStandard', { n: robotLimit })}</p>
+        <p class="muted mt-3">{isAdmin ? $t('robots.planAdmin') : $t('robots.planStandard', { n: robotLimit })}</p>
         {#if selectedRobot && robotDraft}
           <button class="btn-sm ghost robot-nav-btn" on:click={backToRobotList}>{$t('robots.back')}</button>
         {:else if !creatingRobot}
@@ -1049,7 +1049,6 @@
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: var(--space-4); align-items: start; }
   .conn { max-width: 560px; margin-inline: auto; }
-  .checkbox-row { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-4) 0 0; font-weight: 600; }
   .tz-note { margin-top: var(--space-2); }
 
   .env-switch { display: flex; gap: var(--space-2); flex-wrap: wrap; }
@@ -1062,20 +1061,25 @@
 
   .bot-status { border: 1px solid var(--border); border-left: 3px solid var(--amber); border-radius: var(--radius-md); background: var(--surface-2); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-4); }
   .bot-status.on { border-left-color: var(--green); }
-  .bot-head { display: flex; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
+  .bot-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-2); }
   .bot-status p { margin-top: var(--space-1); line-height: 1.5; }
   .bot-status .warn { color: var(--amber); font-size: var(--text-sm); }
 
   .stack-title { display: flex; flex-direction: column; }
   .switch-inline { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-xs); font-weight: 600; white-space: nowrap; }
-  .robot-nav-btn { display: inline-flex; margin-top: var(--space-3); margin-bottom: var(--space-4); }
+  .robot-nav-btn { display: inline-flex; margin: var(--space-3) 0; }
   .robot-editor-actions { display: flex; justify-content: space-between; gap: var(--space-2); }
   .robot-list { display: flex; flex-direction: column; gap: var(--space-2); }
-  .robot-row { display: flex; align-items: center; gap: var(--space-2); width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); color: var(--text); font: inherit; height: auto; }
+  .robot-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); width: 100%; text-align: left; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-2) var(--space-3); color: var(--text); font: inherit; height: auto; }
   .robot-row:hover:not(:disabled) { border-color: var(--brand); filter: none; }
   .robot-name { font-weight: 700; }
   .robot-sym, .robot-dca { font-size: var(--text-xs); }
   .robot-open { color: var(--brand); font-weight: 700; font-size: var(--text-xs); white-space: nowrap; }
+  /* Mobile: rows grow vertically (wrap to a 2nd line) instead of overflowing the card. */
+  @media (max-width: 600px) {
+    .robot-row .spacer { display: none; }
+    .robot-row .robot-open { margin-left: auto; }
+  }
   .live-panel { border-top: 1px solid var(--border); padding-top: var(--space-4); margin-top: var(--space-4); }
   .live-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
   .live-panel-title { font-weight: 700; }

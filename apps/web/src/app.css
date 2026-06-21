@@ -108,6 +108,8 @@ a:hover { text-decoration: underline; }
 .card-header { display: flex; flex-direction: column; gap: var(--space-1); margin-bottom: var(--space-4); }
 .card-title { font-size: var(--text-lg); font-weight: 800; }
 .card-subtitle { color: var(--muted); font-size: var(--text-sm); line-height: 1.5; }
+/* A help disclosure right under a card header shouldn't double the header→content gap. */
+.card-header:has(+ .collapsible.help) { margin-bottom: var(--space-3); }
 
 /* Forms. A bare <label> followed by a control gets consistent spacing automatically; group with
    .field when you need an explicit wrapper. */
