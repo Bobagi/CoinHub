@@ -37,8 +37,10 @@
   .collapsible[open] > summary .cl-caret { transform: rotate(90deg); }
 
   /* Section: a full card with a large heading (e.g. "First steps", "Positions & performance"),
-     matching the non-collapsible card titles (var(--text-lg)). */
-  .section .cl-title { font-size: var(--text-lg); font-weight: 800; }
+     matching the non-collapsible card titles (var(--text-lg)). Scope to the section's OWN
+     summary (direct child) — a plain ">" descendant selector would leak into a nested help
+     Collapsible's title (same component scope) and blow it up to section size. */
+  .section > summary > .cl-title { font-size: var(--text-lg); font-weight: 800; }
 
   /* Help: the compact "how it works" disclosure used throughout the app. */
   .collapsible.help {

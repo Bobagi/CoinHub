@@ -390,6 +390,15 @@ the front, kept on purpose because the donut/profitability need the full set (do
   cause of uneven rhythm; (2) **verify responsiveness in code** (grep flex rows for `flex-wrap`/reflow; a
   no-wrap flex row with fixed-width children overflows on mobile). Every review must include a mobile
   viewport AND this code pass.
+- **Spoiler "Como funciona" was XL inside "Posições & desempenho"** (`Collapsible.svelte`). That card is a
+  `variant="section"` Collapsible, and the per-subtab help is a `variant="help"` Collapsible **nested inside
+  it**. The rule `.section .cl-title{font-size:lg;font-weight:800}` used a **bare descendant** combinator, so
+  it leaked through the same component scope into the nested help title — rendering "Como funciona" at section
+  size there while the un-nested twins in **Comprar/Robôs** stayed compact. Fixed to a **direct-child** scope
+  `.section > summary > .cl-title` so the section-heading style applies only to the section's own title. **Rule:
+  variant styles on a component that can nest inside itself must be scoped with `>` (or a variant-only class),
+  never a bare descendant.** Verified with a faithful adjacent mock (real tokens + Collapsible CSS) screenshotted
+  via the `frontend-review` capture engine; the same general lesson was promoted into the skill's rubric (Pillar 2).
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
