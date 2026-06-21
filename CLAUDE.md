@@ -47,7 +47,7 @@ docker-compose.yml   db + migrate + api (+ scraper under the `scraper` profile).
 `/api/v1/binance/{credentials,credentials/activate,price,symbols,symbol-filters,klines,open-orders}` ·
 `/api/v1/operations` (GET list / POST buy) · `/api/v1/operations/sell` (POST close-now) · `/api/v1/operations/place-sell` (POST (re)place take-profit) · `/api/v1/operations/executions` ·
 `/api/v1/portfolio/{source,assets,dividends}` ·
-`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account/avatar` (GET, same-origin proxy of the Google profile picture) · `/api/v1/account` (DELETE) · `/health`.
+`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account/avatar` (GET, same-origin proxy of the Google profile picture) · `/api/v1/account/agreement/accept` (POST, records Terms+Privacy consent) · `/api/v1/account` (DELETE) · `/health`.
 Sessions = opaque random token in a Secure httpOnly cookie (`coin_hub_session`); only its SHA-256
 hash is stored.
 
@@ -399,6 +399,36 @@ the front, kept on purpose because the donut/profitability need the full set (do
   variant styles on a component that can nest inside itself must be scoped with `>` (or a variant-only class),
   never a bare descendant.** Verified with a faithful adjacent mock (real tokens + Collapsible CSS) screenshotted
   via the `frontend-review` capture engine; the same general lesson was promoted into the skill's rubric (Pillar 2).
+
+### 2026-06-21 session (Terms+Privacy consent gate + avatar cache fix)
+- **Avatar cache bug fixed.** The avatar proxy serves every user from the same path
+  `/api/v1/account/avatar` with `Cache-Control: private, max-age=3600`, so after sign out + sign in as a
+  different Google account the browser kept serving the previous user's cached image (reloads don't
+  refetch cached images). `/auth/me` now returns the path with a stable `?v=<sha256(picURL)[:12]>` token
+  (`toUserResponse` in `auth_handler.go`), so each distinct picture is a distinct cacheable resource and
+  account switches (and rotated Google URLs) bust the cache.
+- **DB-backed Terms of Use + Privacy Policy consent — the legal answer is YES, it must be server-side**
+  (a front-end checkbox is neither enforceable nor auditable). Implemented:
+  - **migration 0027** `user_agreement_acceptances` (append-only: `user_id` FK CASCADE, `document_version`,
+    `ip_address`, `user_agent`, `accepted_at`) — the durable proof of consent; PII erased on account delete.
+  - **`domain.CurrentAgreementVersion = "2026-06-21"`** — bump it (date-sortable) when the legal text
+    changes materially → every prior acceptance stops matching → everyone must re-accept.
+  - **`AgreementService`** + `UserAgreementAcceptanceRepository`; endpoint **`POST /api/v1/account/agreement/accept`**
+    (records consent + IP/UA, returns the refreshed user). `/auth/me` exposes `terms_accepted` + `terms_version`.
+  - **Enforcement (defense in depth):** `enforceVerifiedAndAgreed` (email AND terms) now gates the
+    money/robot endpoints (operations buy/sell/place, settings PUT, credentials POST/activate, robots
+    create/update) → 403 `code:terms_not_accepted` (`err.terms_not_accepted` in i18n). Fails CLOSED on a
+    read error so a consent gap is never silently skipped. `agreementService` threaded through Auth/Account/
+    Operations/API/Robots handlers via `main.go`.
+  - **SPA:** `AgreementGate.svelte` — a blocking full-screen gate shown by `App.svelte` whenever a
+    signed-in user has `terms_accepted=false` (covers email, Google AND existing users on a version bump);
+    shows the full Terms+Privacy text, a checkbox, Accept (→ `api.acceptAgreement()`) or sign out.
+  - **Trilingual Terms+Privacy** (`agreement.*` in en/pt/es) drafted to cover: non-custodial, risk/no
+    profit guarantee, **paid robots/billing/cancellation**, **advertising/third parties**, LGPD/data,
+    liability disclaimer, governing law (Brazil), changes→re-accept. Contact: `bobagi.contact@gmail.com`.
+    **These are an engineer-drafted template, not legal advice** — see `legal-audit-2026-06-21.md` and have a
+    Brazilian lawyer review before charging money (the audit report lists the gaps).
+  - Verified end-to-end on prod: signup ⇒ `terms_accepted=false` ⇒ accept ⇒ `true` (throwaway account, deleted).
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add
