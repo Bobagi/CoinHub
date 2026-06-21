@@ -889,6 +889,7 @@
           <div class="prof-chart-block mt-5">
             <ProfitabilityPanel {operations} />
           </div>
+          <p class="muted mt-4">{$t('prof.taxNote')}</p>
         {/if}
       {/if}
     </Collapsible>

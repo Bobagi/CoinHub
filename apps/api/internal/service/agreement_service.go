@@ -28,6 +28,12 @@ func (service *AgreementService) HasAcceptedCurrent(operationContext context.Con
 	return service.repository.HasAcceptedVersion(operationContext, userIdentifier, domain.CurrentAgreementVersion)
 }
 
+// LatestAcceptance returns the user's most recent acceptance (any version), so the account page can
+// show which version they accepted and when. found=false when the user has never accepted.
+func (service *AgreementService) LatestAcceptance(operationContext context.Context, userIdentifier int64) (domain.UserAgreementAcceptance, bool, error) {
+	return service.repository.LatestAcceptance(operationContext, userIdentifier)
+}
+
 // Accept records the user's consent to the current version, capturing the request's IP and user agent
 // as evidence. Re-accepting is harmless (the log is append-only history).
 func (service *AgreementService) Accept(operationContext context.Context, userIdentifier int64, ipAddress string, userAgent string) error {

@@ -101,7 +101,7 @@ export const binanceStatus = writable<{ has_active_credential: boolean; active_e
 
 // Minimal hash-based routing — enough for the authenticated views + the email-link pages, without
 // pulling in a router. `reset` and `verify` are reached from email links (#/reset?token=…).
-export type Route = 'dashboard' | 'account' | 'reset' | 'verify'
+export type Route = 'dashboard' | 'account' | 'reset' | 'verify' | 'terms' | 'privacy'
 
 function pathFromHash(): string {
   if (typeof location === 'undefined') return ''
@@ -116,6 +116,10 @@ function routeFromHash(): Route {
       return 'reset'
     case 'verify':
       return 'verify'
+    case 'terms':
+      return 'terms'
+    case 'privacy':
+      return 'privacy'
     default:
       return 'dashboard'
   }
@@ -131,12 +135,42 @@ export function hashToken(): string {
 
 export const route = writable<Route>(routeFromHash())
 
+const routeHashes: Partial<Record<Route, string>> = {
+  account: '#/settings',
+  terms: '#/terms',
+  privacy: '#/privacy'
+}
+
 export function navigate(to: Route) {
-  const hash = to === 'account' ? '#/settings' : '#/'
+  const hash = routeHashes[to] ?? '#/'
   if (typeof location !== 'undefined' && location.hash !== hash) location.hash = hash
   route.set(to)
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => route.set(routeFromHash()))
+}
+
+// --- Cookie / advertising consent (LGPD) -------------------------------------------------------
+// CoinHub itself sets only one strictly-necessary cookie (the session), which doesn't require consent.
+// The banner + consent state exist for when ADVERTISING (third-party tracking cookies) is turned on:
+// flip `adsEnabled` to true and the banner appears; any ad/analytics script must be gated on
+// `cookieConsent === 'accepted'`. Kept dormant (no banner shown) until then, so we don't ask for
+// consent we don't yet need. The user's choice persists in localStorage.
+export const adsEnabled = false
+
+export type CookieChoice = 'accepted' | 'rejected'
+const COOKIE_CONSENT_KEY = 'coinhub_cookie_consent'
+
+function readCookieConsent(): CookieChoice | null {
+  if (typeof localStorage === 'undefined') return null
+  const stored = localStorage.getItem(COOKIE_CONSENT_KEY)
+  return stored === 'accepted' || stored === 'rejected' ? stored : null
+}
+
+export const cookieConsent = writable<CookieChoice | null>(readCookieConsent())
+
+export function setCookieConsent(choice: CookieChoice) {
+  if (typeof localStorage !== 'undefined') localStorage.setItem(COOKIE_CONSENT_KEY, choice)
+  cookieConsent.set(choice)
 }

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 
 	"coin-hub/internal/domain"
 )
@@ -14,6 +15,8 @@ type UserAgreementAcceptanceRepository interface {
 	RecordAcceptance(operationContext context.Context, acceptance domain.UserAgreementAcceptance) error
 	// HasAcceptedVersion reports whether the user has at least one acceptance of the given version.
 	HasAcceptedVersion(operationContext context.Context, userIdentifier int64, documentVersion string) (bool, error)
+	// LatestAcceptance returns the user's most recent acceptance (any version). found=false when none.
+	LatestAcceptance(operationContext context.Context, userIdentifier int64) (acceptance domain.UserAgreementAcceptance, found bool, err error)
 }
 
 type PostgresUserAgreementAcceptanceRepository struct {
@@ -49,4 +52,24 @@ func (repository *PostgresUserAgreementAcceptanceRepository) HasAcceptedVersion(
 		documentVersion,
 	).Scan(&exists)
 	return exists, scanError
+}
+
+func (repository *PostgresUserAgreementAcceptanceRepository) LatestAcceptance(operationContext context.Context, userIdentifier int64) (domain.UserAgreementAcceptance, bool, error) {
+	var acceptance domain.UserAgreementAcceptance
+	scanError := repository.Database.QueryRowContext(
+		operationContext,
+		`SELECT id, user_id, document_version, accepted_at
+		 FROM user_agreement_acceptances
+		 WHERE user_id = $1
+		 ORDER BY accepted_at DESC, id DESC
+		 LIMIT 1`,
+		userIdentifier,
+	).Scan(&acceptance.Identifier, &acceptance.UserIdentifier, &acceptance.DocumentVersion, &acceptance.AcceptedAt)
+	if errors.Is(scanError, sql.ErrNoRows) {
+		return domain.UserAgreementAcceptance{}, false, nil
+	}
+	if scanError != nil {
+		return domain.UserAgreementAcceptance{}, false, scanError
+	}
+	return acceptance, true, nil
 }

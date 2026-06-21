@@ -47,7 +47,7 @@ docker-compose.yml   db + migrate + api (+ scraper under the `scraper` profile).
 `/api/v1/binance/{credentials,credentials/activate,price,symbols,symbol-filters,klines,open-orders}` ·
 `/api/v1/operations` (GET list / POST buy) · `/api/v1/operations/sell` (POST close-now) · `/api/v1/operations/place-sell` (POST (re)place take-profit) · `/api/v1/operations/executions` ·
 `/api/v1/portfolio/{source,assets,dividends}` ·
-`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account/avatar` (GET, same-origin proxy of the Google profile picture) · `/api/v1/account/agreement/accept` (POST, records Terms+Privacy consent) · `/api/v1/account` (DELETE) · `/health`.
+`/api/v1/account/profile` (PUT) · `/api/v1/account/password` (POST) · `/api/v1/account/access` (GET, paged sign-in history) · `/api/v1/account/avatar` (GET, same-origin proxy of the Google profile picture) · `/api/v1/account/agreement/accept` (POST, records Terms+Privacy consent) · `/api/v1/account/agreement` (GET, accepted vs current version + date) · `/api/v1/account` (DELETE) · `/health`.
 Sessions = opaque random token in a Secure httpOnly cookie (`coin_hub_session`); only its SHA-256
 hash is stored.
 
@@ -429,6 +429,27 @@ the front, kept on purpose because the donut/profitability need the full set (do
     **These are an engineer-drafted template, not legal advice** — see `legal-audit-2026-06-21.md` and have a
     Brazilian lawyer review before charging money (the audit report lists the gaps).
   - Verified end-to-end on prod: signup ⇒ `terms_accepted=false` ⇒ accept ⇒ `true` (throwaway account, deleted).
+- **Second pass — acted on the audit's "doable now" items** (version bumped to **`2026-06-21.2`**, so the
+  users who already accepted re-accept the expanded text):
+  - **Public, versioned Terms + Privacy pages** `#/terms` + `#/privacy` (`LegalDocument.svelte`, routes in
+    `stores.ts`), linked from `LegalFooter`, the gate and the account page. Terms reuse `agreement.*`; a
+    **full standalone Privacy Policy** added as `privacy.*` (en/pt/es): controller, encarregado/contact,
+    legal bases, sharing/processors, international transfer, retention, security, cookies, LGPD rights,
+    children, changes.
+  - **Strengthened consent**: gate checkbox now affirms **18+ + account/key ownership**; **7-day CDC art.49
+    withdrawal** added to the paid clause; CVM-defensive wording ("you choose every parameter; the software
+    only executes your rules, never trades at its own discretion / manages assets").
+  - **`GET /api/v1/account/agreement`** (current vs accepted version + date) → shown in `AccountSettings`
+    ("you accepted version X on <date>"). **Tax-responsibility reminder** (`prof.taxNote`) under the
+    profitability panel.
+  - **Cookie-consent mechanism built but DORMANT** (`CookieConsent.svelte` + `cookieConsent` store +
+    `stores.adsEnabled=false`): no banner shown until ads are enabled (CoinHub sets only the essential
+    session cookie today). **To enable ads: flip `adsEnabled=true` and gate the ad/analytics script on
+    `cookieConsent==='accepted'`.**
+  - **Can't be done in code (operator/lawyer/provider):** lawyer review + CVM opinion on the paid robot;
+    CNPJ + invoicing; secret rotation + git-history purge (backlog #1, credential-bound + destructive);
+    AdSense eligibility/approval; the subscription cancel/refund *flow* (billing not built, backlog #8);
+    managed KMS. Full status + "what you must do" in `legal-audit-2026-06-21.md` §3/§3a.
 
 ## Trading strategy, terminology & spending caps (what the robots actually do / don't)
 Canonical, user-facing explanation source — mirrored in `README.md`; surface it in the UI as we add

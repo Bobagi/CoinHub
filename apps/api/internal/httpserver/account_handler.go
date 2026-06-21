@@ -65,7 +65,41 @@ func (handler *AccountHandler) RegisterRoutes(router *http.ServeMux) {
 	router.HandleFunc("/api/v1/account/access", handler.handleAccessHistory)
 	router.HandleFunc("/api/v1/account/avatar", handler.handleAvatar)
 	router.HandleFunc("/api/v1/account/agreement/accept", handler.handleAcceptAgreement)
+	router.HandleFunc("/api/v1/account/agreement", handler.handleAgreementStatus)
 	router.HandleFunc("/api/v1/account", handler.handleDeleteAccount)
+}
+
+// handleAgreementStatus reports which version of the Terms+Privacy the user last accepted (and when),
+// plus the version currently in force — so the account page can show "you accepted version X on <date>"
+// and whether a newer version is pending.
+func (handler *AccountHandler) handleAgreementStatus(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	operationContext, cancel := context.WithTimeout(request.Context(), 5*time.Second)
+	defer cancel()
+	latest, found, lookupError := handler.agreementService.LatestAcceptance(operationContext, userIdentifier)
+	if lookupError != nil {
+		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not load your acceptance.")
+		return
+	}
+
+	payload := map[string]interface{}{
+		"current_version":  handler.agreementService.CurrentVersion(),
+		"accepted_version": "",
+		"accepted_at":      "",
+	}
+	if found {
+		payload["accepted_version"] = latest.DocumentVersion
+		payload["accepted_at"] = latest.AcceptedAt.Format(time.RFC3339)
+	}
+	writeJSON(responseWriter, http.StatusOK, payload)
 }
 
 // handleAcceptAgreement records the authenticated user's consent to the current Terms of Use + Privacy

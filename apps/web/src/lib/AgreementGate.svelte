@@ -9,6 +9,11 @@
   import { t } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
 
+  // Open the full, standalone Terms/Privacy pages from inside the gate. Navigating away then back
+  // re-shows the gate (terms_accepted is still false), so nothing is lost.
+  function openTerms() { navigate('terms') }
+  function openPrivacy() { navigate('privacy') }
+
   let agreed = false
   let busy = false
 
@@ -55,6 +60,11 @@
     <h1 class="title">{$t('agreement.title')}</h1>
     <p class="muted version">{$t('agreement.version', { version: $currentUser?.terms_version || '' })}</p>
     <p class="intro">{$t('agreement.intro')}</p>
+    <p class="full-links">
+      <button type="button" class="link-btn" on:click={openTerms}>{$t('legal.viewTerms')}</button>
+      <span aria-hidden="true">·</span>
+      <button type="button" class="link-btn" on:click={openPrivacy}>{$t('legal.viewPrivacy')}</button>
+    </p>
 
     <div class="doc" role="region" aria-label={$t('agreement.title')}>
       {#each sections as key}
@@ -88,6 +98,9 @@
   .title { font-size: var(--text-xl); margin-top: var(--space-4); }
   .version { margin-top: var(--space-1); font-size: var(--text-xs); }
   .intro { margin-top: var(--space-3); color: var(--muted); font-size: var(--text-sm); line-height: 1.6; }
+  .full-links { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-2); }
+  .full-links .link-btn { background: transparent; border: none; padding: 0; min-height: 24px; color: var(--brand); font-weight: 700; cursor: pointer; font-size: var(--text-xs); }
+  .full-links .link-btn:hover { text-decoration: underline; }
   .doc {
     margin-top: var(--space-4);
     max-height: 46vh;

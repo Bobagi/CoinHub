@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { api, type AccessEvent } from './api'
+  import { onMount } from 'svelte'
+  import { api, type AccessEvent, type AgreementStatus } from './api'
   import { currentUser, navigate, notifyError } from './stores'
   import { t, intlLocale } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
@@ -12,6 +13,19 @@
   let accessPageSize = 10
   let accessBusy = false
   let accessRequestToken = 0
+
+  // Consent record (which Terms+Privacy version the user accepted, and when).
+  let agreement: AgreementStatus | null = null
+  onMount(async () => {
+    try {
+      agreement = await api.getAgreementStatus()
+    } catch {
+      /* non-critical: the card just hides if this fails */
+    }
+  })
+  function formatAgreementDate(timestamp: string): string {
+    return new Date(timestamp).toLocaleDateString($intlLocale, { year: 'numeric', month: 'long', day: 'numeric' })
+  }
 
   // Server-side paging: reload whenever the page or page size changes (and once on mount).
   $: loadAccessHistory(accessPage, accessPageSize)
@@ -215,6 +229,25 @@
 
   <section class="card">
     <div class="card-header">
+      <span class="card-title">{$t('account.terms.title')}</span>
+    </div>
+    {#if agreement && agreement.accepted_version}
+      <p class="muted">{$t('account.terms.accepted', { version: agreement.accepted_version, date: formatAgreementDate(agreement.accepted_at) })}</p>
+      {#if agreement.accepted_version !== agreement.current_version}
+        <p class="warn mt-2">{$t('account.terms.pending')}</p>
+      {/if}
+    {:else}
+      <p class="muted">{$t('account.terms.never')}</p>
+    {/if}
+    <nav class="terms-links mt-3">
+      <button type="button" class="link-btn" on:click={() => navigate('terms')}>{$t('legal.viewTerms')}</button>
+      <span aria-hidden="true">·</span>
+      <button type="button" class="link-btn" on:click={() => navigate('privacy')}>{$t('legal.viewPrivacy')}</button>
+    </nav>
+  </section>
+
+  <section class="card">
+    <div class="card-header">
       <span class="card-title">{$t('account.access.title')}</span>
       <span class="card-subtitle">{$t('account.access.subtitle')}</span>
     </div>
@@ -289,6 +322,10 @@
   .head .btn-sm { align-self: flex-start; }
   .danger { border-color: rgba(255, 90, 95, 0.4); }
   .danger-title { color: var(--red); }
+  .warn { color: var(--amber); font-size: var(--text-sm); }
+  .terms-links { display: flex; align-items: center; gap: var(--space-2); color: var(--muted); }
+  .terms-links .link-btn { background: transparent; border: none; padding: 0; min-height: 24px; color: var(--brand); font-weight: 700; cursor: pointer; font-size: var(--text-sm); }
+  .terms-links .link-btn:hover { text-decoration: underline; }
   .warning { color: var(--muted); font-size: var(--text-sm); line-height: 1.55; background: rgba(255, 90, 95, 0.08); border: 1px solid rgba(255, 90, 95, 0.25); border-radius: var(--radius-sm); padding: var(--space-3); }
   /* The access table keeps its full width and simply scrolls horizontally inside the card if it
      doesn't fit — so the card stays the same size as the others instead of stretching. */

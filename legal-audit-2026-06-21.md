@@ -18,6 +18,32 @@ by email verification + step-up re-auth. There's a B3/Investidor10 portfolio vie
 (allocation, profitability, P/L), an access/sign-in history with new-device email alerts, and a
 **privacy-preserving hard delete**. **Stated plan: charge for running robots, and show ads.**
 
+## 0a. Status after the 2026-06-21 implementation pass
+Everything **buildable in code** from the action list below has now been **shipped** (see the ✅ tags).
+What remains is, by nature, **off-platform** — it needs you, a lawyer, an accountant, or an external
+provider (a court/regulator opinion, a CNPJ, AdSense approval, secret rotation on live services). Those
+are tagged ⛔ (can't be done in code) below, with what *you* must do.
+
+**Shipped in this pass (code):**
+- ✅ **Public, permanent, versioned Terms & Privacy pages** — `#/terms` and `#/privacy`
+  (`LegalDocument.svelte`), linked from the footer, the consent gate and the account page. Trilingual.
+- ✅ **Full standalone Privacy Policy** (`privacy.*`, en/pt/es): controller identity, contact/encarregado,
+  what data + **legal bases**, sharing/processors, **international transfer**, retention, security,
+  **cookies**, **LGPD rights**, children, changes — covering audit item F/P1#7.
+- ✅ **Strengthened consent**: the gate checkbox now also affirms **18+ and account/key ownership**
+  (item J/P2#13); the version was **bumped to `2026-06-21.2`** so the users who already accepted re-accept
+  the expanded text; the gate links to the full Terms/Privacy pages.
+- ✅ **Explicit 7-day right of withdrawal (CDC art. 49)** added to the paid-features clause (item E/P0#6,
+  the *text* part — the actual cancel/refund flow waits for the billing system).
+- ✅ **CVM-defensive wording**: the Terms now state the user **chooses every parameter and the software
+  only executes their rules, never trading at its own discretion or managing assets** (item B framing).
+- ✅ **Tax-responsibility reminder** shown next to the profitability panel (item D/P1#10).
+- ✅ **Account page shows the consent record** — which version you accepted and when
+  (`GET /api/v1/account/agreement`) (item A/P1#9).
+- ✅ **Cookie-consent mechanism built and ready** (`CookieConsent.svelte` + `cookieConsent` store),
+  **dormant** behind `stores.adsEnabled=false` so it shows the moment ads are switched on, and any
+  ad/analytics script must gate on `cookieConsent==='accepted'` (item F/P0#3 — *mechanism*; see ⛔ note).
+
 ## 1. Existing strengths (don't regress these)
 Non-custodial architecture; encrypted keys + trade-only-key recommendation; testnet-first + live opt-in;
 step-up auth on money actions; enforced email verification; access logging + new-device alerts;
@@ -125,28 +151,56 @@ activity** in Brazil:
 
 ---
 
-## 3. Prioritized action list
+## 3. Prioritized action list  *(✅ done in code · 🟡 partly done · ⛔ off-platform: needs you/lawyer/provider)*
 
 **P0 — before the first paid charge or first ad impression**
-1. **Lawyer review** of Terms + Privacy, with a specific **CVM/administração-de-carteiras opinion** on the
-   paid robot (risk area B).
-2. **Form a legal entity (CNPJ) + invoicing** and confirm taxes with an accountant (D).
-3. **Cookie-consent banner** (LGPD) before ads (F).
-4. **Public, permanent, versioned** Terms & Privacy pages (A).
-5. **Rotate the leaked secrets + purge git history** (backlog #1) — these are financial keys (G).
-6. **Explicit 7-day withdrawal + clear cancel/refund flow** for subscriptions (E).
+1. ⛔ **Lawyer review** of Terms + Privacy, with a specific **CVM/administração-de-carteiras opinion** on
+   the paid robot (B). *Needs a Brazilian lawyer — I can't give a legal opinion. The text is now drafted
+   and CVM-defensively worded for them to review.*
+2. ⛔ **Form a legal entity (CNPJ) + invoicing** and confirm taxes with an accountant (D). *Government +
+   accountant action.*
+3. 🟡 **Cookie-consent banner** (LGPD) before ads (F). *Mechanism built + dormant; you flip
+   `stores.adsEnabled` to true (and gate the ad script on consent) when ads go live.*
+4. ✅ **Public, permanent, versioned** Terms & Privacy pages (A). **Done.**
+5. ⛔ **Rotate the leaked secrets + purge git history** (backlog #1) — financial keys (G). *Must be done
+   against the live external services (Binance/DB/SMTP) and rewrites git history (force-push) — too
+   destructive/credential-bound to do unattended. **Do this with me in a dedicated session**: rotate each
+   key on its provider, update `.env`, `docker compose up -d`, then `git filter-repo` + force-push.
+   `CREDENTIALS_ENCRYPTION_KEY` must NOT change without a re-encrypt migration (it would brick stored
+   Binance secrets).*
+6. 🟡 **Explicit 7-day withdrawal + clear cancel/refund flow** for subscriptions (E). *Text added; the
+   actual cancel/refund flow ships with the billing system (backlog #8, not built yet).*
 
 **P1**
-7. Full **Privacy Policy**: controller, encarregado/contact, legal bases, retention, ANPD breach process,
-   international transfer (F).
-8. **AdSense crypto-eligibility** check + `ads.txt` + ad placement rules (I).
-9. Show users **which terms version they accepted + date** in the account page (we store it) (A).
-10. **Tax-responsibility reminder** near the profitability panel (D).
+7. ✅ Full **Privacy Policy**: controller, encarregado/contact, legal bases, retention, international
+   transfer, cookies, LGPD rights (F). **Done** (the ANPD breach-notification *process* is an
+   operational runbook for you to keep, not app code).
+8. ⛔ **AdSense crypto-eligibility** check + `ads.txt` + ad placement rules (I). *Needs a Google publisher
+   account + approval; crypto content is a restricted AdSense category — confirm eligibility first.*
+9. ✅ Show users **which terms version they accepted + date** in the account page (A). **Done.**
+10. ✅ **Tax-responsibility reminder** near the profitability panel (D). **Done.**
 
 **P2**
-11. **Key separation** (KMS/secret manager) for `CREDENTIALS_ENCRYPTION_KEY` + incident-response doc (G).
-12. **Status/uptime page**; continue to make no availability promises (K).
-13. **Age self-declaration** at signup; document reliance on Binance KYC (J).
+11. ⛔ **Key separation** (KMS/secret manager) for `CREDENTIALS_ENCRYPTION_KEY` + incident-response doc
+    (G). *Infra decision; a single VPS has no managed KMS — needs an external secret manager.*
+12. 🟡 **Status/uptime page**; continue to make no availability promises (K). *Terms already disclaim
+    warranties; a status page is optional polish, deferred.*
+13. ✅ **Age self-declaration** at signup (J) — folded into the consent checkbox (18+ + account/key
+    ownership). *Documenting reliance on Binance KYC is covered in the Privacy Policy.*
+
+## 3a. What CANNOT be done now (and exactly what you must do)
+- **Legal opinion / lawyer sign-off (P0#1)** — engage a Brazilian lawyer; give them `legal-audit-…md`
+  + the live Terms/Privacy. The CVM "is the paid robot regulated portfolio management?" question is the
+  one to ask first.
+- **CNPJ + invoicing + tax setup (P0#2)** — open the company / MEI-or-other, pick the CNAE, set up nota
+  fiscal, before taking any money or ad payout.
+- **Secret rotation + git-history purge (P0#5)** — credential-bound + destructive; do it with me in a
+  focused session (don't rotate `CREDENTIALS_ENCRYPTION_KEY` without the re-encrypt migration).
+- **AdSense eligibility/approval + publisher id + real `ads.txt` (P1#8)** — Google-side; then I wire the
+  ad slots and flip `adsEnabled` (which auto-shows the cookie banner already built).
+- **Subscription cancel/refund flow (P0#6 flow)** — ships with the billing system (backlog #8), which
+  isn't built yet; the *7-day right* is already stated in the Terms.
+- **Managed KMS for the encryption key (P2#11)** — needs an external secret manager / infra change.
 
 ---
 

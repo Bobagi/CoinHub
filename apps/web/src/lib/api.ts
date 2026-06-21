@@ -23,6 +23,12 @@ export interface AuthProviders {
   email: boolean
 }
 
+export interface AgreementStatus {
+  current_version: string
+  accepted_version: string // '' if never accepted
+  accepted_at: string // RFC3339, '' if never accepted
+}
+
 export interface TradingSettings {
   trading_pair_symbol: string
   capital_threshold: number
@@ -192,6 +198,7 @@ export const api = {
   getAccessHistory: (page: number, pageSize: number) =>
     request<AccessHistory>('GET', `/api/v1/account/access?page=${page}&page_size=${pageSize}`),
   acceptAgreement: () => request<User>('POST', '/api/v1/account/agreement/accept'),
+  getAgreementStatus: () => request<AgreementStatus>('GET', '/api/v1/account/agreement'),
 
   getSettings: () => request<TradingSettings>('GET', '/api/v1/settings'),
   saveSettings: (settings: TradingSettings) => request<TradingSettings>('PUT', '/api/v1/settings', settings),

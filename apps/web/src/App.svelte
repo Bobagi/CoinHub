@@ -11,6 +11,8 @@
   import ResetPassword from './lib/ResetPassword.svelte'
   import VerifyEmail from './lib/VerifyEmail.svelte'
   import AgreementGate from './lib/AgreementGate.svelte'
+  import LegalDocument from './lib/LegalDocument.svelte'
+  import CookieConsent from './lib/CookieConsent.svelte'
   import VerifyBanner from './lib/VerifyBanner.svelte'
   import AppModal from './lib/AppModal.svelte'
   import Toasts from './lib/Toasts.svelte'
@@ -88,6 +90,10 @@
   <ResetPassword />
 {:else if $route === 'verify'}
   <VerifyEmail />
+{:else if $route === 'terms'}
+  <LegalDocument doc="terms" />
+{:else if $route === 'privacy'}
+  <LegalDocument doc="privacy" />
 {:else if loading}
   <div class="center muted">{$t('app.loading')}</div>
 {:else if $currentUser && !$currentUser.terms_accepted}
@@ -114,6 +120,9 @@
 
 <!-- Global "popcorn" toast notifications (transient success/error feedback), mounted once. -->
 <Toasts />
+
+<!-- Cookie/advertising consent banner (LGPD). Dormant until ads are enabled (see stores.adsEnabled). -->
+<CookieConsent />
 
 <style>
   .center { display: grid; place-items: center; min-height: 100vh; }
