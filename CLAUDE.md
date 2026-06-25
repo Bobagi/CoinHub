@@ -9,24 +9,26 @@ truth so you don't have to re-derive the project each session.
 > Binance), `claude-md-management` (manter este arquivo). Política completa em `~/.claude/CLAUDE.md`.
 
 > ## ▶ CONTINUE AQUI (handoff — 2026-06-25)
-> Os plugins estão **instalados** mas só carregam após um **restart LIMPO** (`claude` novo, **não**
-> `--resume`). Confirme com `claude plugin list` — devem aparecer **5 enabled**: `frontend-design`,
-> `claude-md-management`, `security-guidance`, `feature-dev`, `chrome-devtools-mcp`. Se os plugins
-> ainda derem `Unknown skill`, a sessão não recarregou — peça um restart limpo.
+> Plugins **carregando OK** — `claude plugin list` mostra os **5 enabled** (`frontend-design`,
+> `claude-md-management`, `security-guidance`, `feature-dev`, `chrome-devtools-mcp`). Se algum der
+> `Unknown skill`, a sessão não recarregou — peça um restart limpo (`claude` novo, não `--resume`).
 >
-> **Tarefas que o operador quer assim que os plugins carregarem:**
-> 1. **(a) Hero da landing com o plugin `frontend-design`** — redesenhar **só o hero** de
->    `apps/web/src/lib/Landing.svelte` (versão mais marcante/distintiva), **mantendo** a identidade
->    gold+dark (tokens em `apps/web/src/app.css`) e o i18n trilíngue (`landing.hero.*` em
->    `apps/web/src/lib/i18n.ts`). Depois: rodar `frontend-review` → `./deploy.sh web` → commit/push.
-> 2. **(b) Backend Go com o plugin `security-guidance`** — auditar `apps/api`, foco no manejo das
->    chaves Binance (`UserCredentialService`, AES-256-GCM), auth/sessões, escopo por usuário
->    (`WHERE user_id = $1`) e o proxy de avatar (anti-SSRF em `account_handler`).
+> **PRÓXIMA TAREFA — (b) Backend Go com o plugin `security-guidance`:** auditar `apps/api`, foco no
+> manejo das chaves Binance (`UserCredentialService`, AES-256-GCM), auth/sessões, escopo por usuário
+> (`WHERE user_id = $1`) e o proxy de avatar (anti-SSRF em `account_handler`). Build/test só via Docker
+> (Go fora do PATH — ver "Build & run"). Depois: corrigir o que achar → `./deploy.sh api` → commit/push.
 >
-> **Já feito nesta rodada:** landing pública trilíngue no ar (deslogado em `#/`; login em `#/login`) —
-> commits `a174a52` + fix `65b7e52`; `frontend-review` da landing concluído (relatório em
-> `.claude/frontend-review/`). Plugin novo `chrome-devtools-mcp` (Google oficial) disponível p/
-> inspeção de browser ao vivo (perf/network/console/a11y) — complementa o `frontend-review`.
+> **(a) Hero da landing — FEITO nesta rodada (commit `9e243ce`, no ar).** Redesenho via plugin
+> `frontend-design`: hero virou split assimétrico — claim à esquerda + um **"console de robô ao vivo"**
+> à direita (tape monospace DCA→take-profit→vendido, chip Testnet, dot LIVE pulsante, legenda
+> não-custodial). Dentro do design system gold+dark (só monospace nova, escopada p/ os dados); i18n
+> trilíngue `landing.hero.demo.*`; console `aria-hidden`; reflow 2-col→1-col em 860px. `frontend-review`
+> rodado e **limpo** (P0/P1/P2 = 0; relatório em `.claude/frontend-review/2026-06-25-hero/`). Lição geral
+> promovida na rubric: verificar reflow logo **acima** do breakpoint + aria-hide de painel-demo decorativo.
+>
+> **Já feito antes:** landing pública trilíngue no ar (deslogado em `#/`; login em `#/login`) — commits
+> `a174a52` + `65b7e52`. `chrome-devtools-mcp` (Google oficial) disponível p/ inspeção de browser ao vivo
+> (perf/network/console/a11y) — complementa o `frontend-review`.
 > **Lembrete de mercado** (análise anterior): maiores gaps pré-lançamento = **backup do Postgres,
 > testes no core de ordens, monitoramento do worker** (ver TODO/backlog abaixo).
 
