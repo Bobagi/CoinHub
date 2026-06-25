@@ -184,7 +184,9 @@
   .head-sub { color: var(--muted); line-height: 1.6; }
 
   .grid { display: grid; gap: var(--space-4); }
-  .steps { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  /* 3 steps stay a single even row (3-up) down to the mobile breakpoint, so the tablet width never
+     orphans the 3rd card into an empty second row. Features (even count of 4) reflow freely. */
+  .steps { grid-template-columns: repeat(3, 1fr); }
   .feats { grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
 
   .card h3 { font-size: var(--text-md); font-weight: 800; margin: 0 0 var(--space-2); }
@@ -221,5 +223,6 @@
   @media (max-width: 600px) {
     .nav { justify-content: center; }
     .hero { padding-top: var(--space-6); }
+    .steps { grid-template-columns: 1fr; }
   }
 </style>
