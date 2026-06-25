@@ -3,6 +3,11 @@
 Guidance for Claude Code (and humans) working in this repo. Read this first; it is the source of
 truth so you don't have to re-derive the project each session.
 
+> **Skill-first (política global):** antes de qualquer tarefa, procure e use skills/plugins que
+> ajudem. Relevantes aqui: `frontend-design` (criar/redesenhar UI — ex.: a landing page),
+> `frontend-review` (auditar a UI), `security-guidance`/`/security-review` (app que guarda chaves
+> Binance), `claude-md-management` (manter este arquivo). Política completa em `~/.claude/CLAUDE.md`.
+
 ## What this is
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It

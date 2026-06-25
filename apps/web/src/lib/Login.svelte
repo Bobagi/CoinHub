@@ -1,12 +1,14 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import { get } from 'svelte/store'
   import { api } from './api'
-  import { currentUser } from './stores'
+  import { currentUser, authMode, navigate } from './stores'
   import { t, locale } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
   import LegalFooter from './LegalFooter.svelte'
 
-  let mode: 'login' | 'signup' | 'forgot' = 'login'
+  // Opens on the form the landing-page CTA picked (login vs signup); defaults to login.
+  let mode: 'login' | 'signup' | 'forgot' = get(authMode)
   let email = ''
   let password = ''
   let displayName = ''
@@ -82,7 +84,7 @@
 <div class="wrap">
   <div class="card auth">
     <div class="top">
-      <div class="brand">Coin<span>Hub</span></div>
+      <button type="button" class="brand brand-btn" on:click={() => navigate('dashboard')}>Coin<span>Hub</span></button>
       <LanguageDropdown compact />
     </div>
     <p class="muted tagline">{$t('login.tagline')}</p>
@@ -158,6 +160,8 @@
   .top { display: flex; justify-content: space-between; align-items: center; }
   .brand { font-size: var(--text-xl); font-weight: 800; }
   .brand span { color: var(--brand); }
+  .brand-btn { background: transparent; border: none; padding: 0; height: auto; min-height: 0; gap: 0; color: var(--text); cursor: pointer; }
+  .brand-btn:hover:not(:disabled) { filter: none; }
   .tagline { margin-top: var(--space-2); line-height: 1.5; }
   .google { margin-top: var(--space-5); }
   .divider { display: flex; align-items: center; gap: var(--space-3); margin: var(--space-4) 0; color: var(--muted); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.06em; }

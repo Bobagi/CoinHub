@@ -5,6 +5,7 @@
   import { api } from './lib/api'
   import { t } from './lib/i18n'
   import Login from './lib/Login.svelte'
+  import Landing from './lib/Landing.svelte'
   import Dashboard from './lib/Dashboard.svelte'
   import AccountSettings from './lib/AccountSettings.svelte'
   import TopNav from './lib/TopNav.svelte'
@@ -111,8 +112,11 @@
   {:else}
     <Dashboard />
   {/if}
-{:else}
+{:else if $route === 'login'}
   <Login />
+{:else}
+  <!-- Logged-out default: the public product landing. #/login shows the auth form. -->
+  <Landing />
 {/if}
 
 <!-- Global styled dialog (confirm-email / locked-screen notices), mounted once. -->

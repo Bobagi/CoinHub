@@ -101,7 +101,11 @@ export const binanceStatus = writable<{ has_active_credential: boolean; active_e
 
 // Minimal hash-based routing — enough for the authenticated views + the email-link pages, without
 // pulling in a router. `reset` and `verify` are reached from email links (#/reset?token=…).
-export type Route = 'dashboard' | 'account' | 'reset' | 'verify' | 'terms' | 'privacy'
+export type Route = 'dashboard' | 'account' | 'reset' | 'verify' | 'terms' | 'privacy' | 'login'
+
+// Which auth form the public Login page opens on. Set by the landing-page CTAs before navigating
+// to #/login ("Sign in" → login tab, "Create account" → signup tab).
+export const authMode = writable<'login' | 'signup'>('login')
 
 function pathFromHash(): string {
   if (typeof location === 'undefined') return ''
@@ -112,6 +116,8 @@ function routeFromHash(): Route {
   switch (pathFromHash()) {
     case 'settings':
       return 'account'
+    case 'login':
+      return 'login'
     case 'reset':
       return 'reset'
     case 'verify':
@@ -138,7 +144,8 @@ export const route = writable<Route>(routeFromHash())
 const routeHashes: Partial<Record<Route, string>> = {
   account: '#/settings',
   terms: '#/terms',
-  privacy: '#/privacy'
+  privacy: '#/privacy',
+  login: '#/login'
 }
 
 export function navigate(to: Route) {
