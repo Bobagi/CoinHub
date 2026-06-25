@@ -57,6 +57,23 @@ low/medium fix applied, no high/critical issues.
   it). Dead legacy single-user repos (`trading_operation_repository.go` etc.) are **unreachable**
   (constructed nowhere) — no security impact, still backlog #7 cleanup so nobody wires an unscoped query.
 
+## 2026-06-25 session (title display font: Sora)
+Operator disliked the all-Inter look on **titles** (Compras/Robôs/Conexão…). Introduced a **display
+face for headings only**, body/UI stays Inter.
+- **`--font-display: 'Sora', var(--font-sans)`** token in `app.css`, applied to `h1,h2,h3,h4` +
+  `.card-title` (NOT the small tab/subtab controls, labels, or the CoinHub wordmark — those stay Inter).
+  Sora was chosen from a rendered comparison (Space Grotesk / Bricolage Grotesque / Fraunces / Sora) the
+  operator picked from.
+- **Self-hosted** (the vhost CSP is `font-src 'self' data:`, so external font CDNs are blocked):
+  `apps/web/public/fonts/sora-latin-800.woff2` + `sora-latinext-800.woff2` (Vite copies `public/` → `dist/`
+  on build; served at `/fonts/...`). `@font-face` weight **800** (the heading weight), `font-display:swap`,
+  split latin / latin-ext by `unicode-range` (pt/es accents ô/ã/ç are in the `latin` subset).
+- **To add a heading weight or swap the face:** drop the woff2 in `public/fonts/`, add an `@font-face`,
+  and only the `--font-display` token + the two heading rules need touching. Source the woff2 from
+  Fontsource jsDelivr (`https://cdn.jsdelivr.net/fontsource/fonts/<family>@latest/<subset>-<wght>-normal.woff2`).
+- Verified live via `frontend-review`: font serves 200 under the CSP; Sora renders on landing + dashboard
+  + agreement-gate titles; responsive 390/768/1280, no overflow. Commit `eb6ab32`.
+
 ## What this is
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It
