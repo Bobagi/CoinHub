@@ -929,10 +929,21 @@ func enforceStepUp(operationContext context.Context, responseWriter http.Respons
 	return true
 }
 
+// clientIPAddress resolves the real public IP of the caller for the durable sign-in history,
+// geolocation and new-device detection. It must NOT trust the leftmost X-Forwarded-For entry: nginx
+// fronts this API with `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for`, which APPENDS the
+// true peer to whatever the client sent — so XFF[0] is attacker-controlled. Trusting it would let a
+// caller forge the IP/location written to the access log and quietly dodge the new-device alert
+// (device fingerprint = SHA-256(user_agent + '|' + ip)). We instead prefer nginx's X-Real-IP, set from
+// $remote_addr (the actual TCP peer, unforgeable), falling back to the RIGHTMOST XFF hop (the one our
+// own proxy appended) and finally the raw RemoteAddr.
 func clientIPAddress(request *http.Request) string {
-	forwardedFor := request.Header.Get("X-Forwarded-For")
-	if forwardedFor != "" {
-		return strings.TrimSpace(strings.Split(forwardedFor, ",")[0])
+	if realIP := strings.TrimSpace(request.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	if forwardedFor := request.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+		hops := strings.Split(forwardedFor, ",")
+		return strings.TrimSpace(hops[len(hops)-1])
 	}
 	host, _, splitError := net.SplitHostPort(request.RemoteAddr)
 	if splitError != nil {
