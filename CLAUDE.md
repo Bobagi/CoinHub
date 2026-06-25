@@ -10,27 +10,52 @@ truth so you don't have to re-derive the project each session.
 
 > ## ▶ CONTINUE AQUI (handoff — 2026-06-25)
 > Plugins **carregando OK** — `claude plugin list` mostra os **5 enabled** (`frontend-design`,
-> `claude-md-management`, `security-guidance`, `feature-dev`, `chrome-devtools-mcp`). Se algum der
-> `Unknown skill`, a sessão não recarregou — peça um restart limpo (`claude` novo, não `--resume`).
+> `claude-md-management`, `security-guidance` [hook-based, sem skill invocável], `feature-dev`,
+> `chrome-devtools-mcp`). Se algum der `Unknown skill`, a sessão não recarregou — restart limpo.
 >
-> **PRÓXIMA TAREFA — (b) Backend Go com o plugin `security-guidance`:** auditar `apps/api`, foco no
-> manejo das chaves Binance (`UserCredentialService`, AES-256-GCM), auth/sessões, escopo por usuário
-> (`WHERE user_id = $1`) e o proxy de avatar (anti-SSRF em `account_handler`). Build/test só via Docker
-> (Go fora do PATH — ver "Build & run"). Depois: corrigir o que achar → `./deploy.sh api` → commit/push.
+> **As duas tarefas do handoff anterior estão FEITAS (a + b).** Próximos itens reais: ver TODO/backlog.
+> Lembrete de mercado (análise anterior): maiores gaps pré-lançamento = **backup do Postgres, testes no
+> core de ordens, monitoramento do worker**.
 >
-> **(a) Hero da landing — FEITO nesta rodada (commit `9e243ce`, no ar).** Redesenho via plugin
-> `frontend-design`: hero virou split assimétrico — claim à esquerda + um **"console de robô ao vivo"**
-> à direita (tape monospace DCA→take-profit→vendido, chip Testnet, dot LIVE pulsante, legenda
-> não-custodial). Dentro do design system gold+dark (só monospace nova, escopada p/ os dados); i18n
-> trilíngue `landing.hero.demo.*`; console `aria-hidden`; reflow 2-col→1-col em 860px. `frontend-review`
-> rodado e **limpo** (P0/P1/P2 = 0; relatório em `.claude/frontend-review/2026-06-25-hero/`). Lição geral
-> promovida na rubric: verificar reflow logo **acima** do breakpoint + aria-hide de painel-demo decorativo.
+> **(a) Hero da landing — FEITO (commit `9e243ce`, no ar).** Redesenho via plugin `frontend-design`:
+> hero virou split assimétrico — claim à esquerda + um **"console de robô ao vivo"** à direita (tape
+> monospace DCA→take-profit→vendido, chip Testnet, dot LIVE pulsante, legenda não-custodial). Dentro do
+> design system gold+dark (só monospace nova, escopada p/ os dados); i18n trilíngue `landing.hero.demo.*`;
+> console `aria-hidden`; reflow 2-col→1-col em 860px. `frontend-review` rodado e **limpo** (P0/P1/P2 = 0;
+> relatório em `.claude/frontend-review/2026-06-25-hero/`).
 >
-> **Já feito antes:** landing pública trilíngue no ar (deslogado em `#/`; login em `#/login`) — commits
-> `a174a52` + `65b7e52`. `chrome-devtools-mcp` (Google oficial) disponível p/ inspeção de browser ao vivo
-> (perf/network/console/a11y) — complementa o `frontend-review`.
-> **Lembrete de mercado** (análise anterior): maiores gaps pré-lançamento = **backup do Postgres,
-> testes no core de ordens, monitoramento do worker** (ver TODO/backlog abaixo).
+> **(b) Auditoria de segurança do backend (`security-guidance`) — FEITA (commit `8c7e7b7`).** Veja a
+> seção **"Security audit 2026-06-25 (backend, via security-guidance)"** abaixo. Resultado: backend
+> sólido; **1 correção** aplicada (IP forjável no log de acesso → usa `X-Real-IP`). `chrome-devtools-mcp`
+> (Google oficial) disponível p/ inspeção de browser ao vivo — complementa o `frontend-review`.
+
+## Security audit 2026-06-25 (backend, via `security-guidance` plugin)
+Full pass over `apps/api` (Go), focused on the four areas the operator named: Binance-key handling,
+auth/sessions, per-user scoping, and the avatar SSRF proxy. **Verdict: backend is in good shape** — one
+low/medium fix applied, no high/critical issues.
+- **FIXED (commit `8c7e7b7`) — spoofable client IP in the security audit trail.** `clientIPAddress`
+  (`auth_handler.go`) trusted `X-Forwarded-For[0]`, but nginx uses `$proxy_add_x_forwarded_for` (APPENDS
+  the real peer to whatever the client sent), so the leftmost hop was attacker-controlled. A caller could
+  forge the IP/location written to `account_access_events` + geolocation and **dodge the new-device-alert
+  email** (fingerprint = `SHA-256(ua+'|'+ip)`). Now prefers nginx's `X-Real-IP` (`$remote_addr`,
+  unforgeable) → rightmost XFF hop → `RemoteAddr`. Not an auth bypass (lockout is per-email, sessions are
+  tokens), but it restores integrity of the sign-in history / takeover signal.
+- **Verified clean (no change needed):** AES-256-GCM at rest with per-message random nonce + 32-byte key
+  validation (`secret_cipher.go`); missing `CREDENTIALS_ENCRYPTION_KEY` **fails closed** (creds disabled,
+  never plaintext). Opaque 32-byte session tokens, only SHA-256 hash stored; cookies `HttpOnly` + `Secure`
+  (default-on: `APP_SECURE_COOKIES != "false"`) + `SameSite=Strict`. CSRF: same-origin guard on
+  state-changing methods + 1 MiB body cap (`security_middleware.go`). OAuth state random + cookie-checked;
+  Google step-up gated by **subject match** behind an HMAC-signed Lax state cookie. bcrypt cost 12;
+  password 8–72; forgot-password always 200 (no email enumeration); reset/verify tokens stored hashed.
+  **No SQLi** (no `Sprintf`-built SQL; all `$n` params). **No IDOR** — every robot/operation mutation is
+  `WHERE id=$n AND user_id=$m`, and handlers derive `userIdentifier` only from the session, never client
+  input. Avatar proxy is https-only, host-pinned to `googleusercontent.com` (incl. redirects), 5 MiB cap,
+  `image/*` check, session-gated.
+- **Noted, not fixed (low / informational):** the AES-GCM key is reused for HMAC (fingerprint + cookie
+  signing) — domain-separated by purpose, acceptable; HKDF subkeys would be textbook-cleaner. The CSRF
+  guard allows requests with neither Origin nor Referer (documented tradeoff; `SameSite=Strict` covers
+  it). Dead legacy single-user repos (`trading_operation_repository.go` etc.) are **unreachable**
+  (constructed nowhere) — no security impact, still backlog #7 cleanup so nobody wires an unscoped query.
 
 ## What this is
 
