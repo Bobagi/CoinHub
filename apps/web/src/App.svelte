@@ -15,6 +15,7 @@
   import LegalDocument from './lib/LegalDocument.svelte'
   import CookieConsent from './lib/CookieConsent.svelte'
   import VerifyBanner from './lib/VerifyBanner.svelte'
+  import StatusBanner from './lib/StatusBanner.svelte'
   import AppModal from './lib/AppModal.svelte'
   import Toasts from './lib/Toasts.svelte'
 
@@ -103,6 +104,7 @@
   <AgreementGate />
 {:else if $currentUser}
   <TopNav />
+  <StatusBanner />
   {#if emailEnabled && !$currentUser.email_verified}
     <!-- Unverified accounts can look around, but every save is blocked (API 403 + styled modal). -->
     <VerifyBanner />

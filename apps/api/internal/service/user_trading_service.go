@@ -37,7 +37,28 @@ func NewUserTradingService(credentialService *UserCredentialService, settingsRep
 // refused unless the user explicitly enabled live trading. The buy is logged as a plain BUY; the daily
 // DCA path uses executeBuyWithType to log a single DAILY_BUY instead.
 func (service *UserTradingService) ExecuteBuy(operationContext context.Context, userIdentifier int64, initiatedBy string, tradingPairSymbol string, quoteAmount float64, targetProfitPercent float64, sellOrderValidityDaysOverride *int) (*domain.TradingOperation, error) {
+	if cooldownError := failIfBinanceCoolingDown(); cooldownError != nil {
+		return nil, cooldownError
+	}
 	return service.executeBuyWithType(operationContext, userIdentifier, initiatedBy, tradingPairSymbol, quoteAmount, targetProfitPercent, sellOrderValidityDaysOverride, domain.TradingOperationTypeBuy)
+}
+
+// failIfBinanceCoolingDown returns a user-facing error when the shared IP rate-limit gate is parked, so
+// a user-initiated action fails fast with a clear, localized message instead of blocking until the
+// Retry-After window passes. The automation worker is intentionally NOT gated here — its requests wait
+// out the cooldown in the transport, so the daily DCA simply runs a little later.
+func failIfBinanceCoolingDown() error {
+	gate := BinanceRateGateStatus()
+	if !gate.InCooldown {
+		return nil
+	}
+	code := "binance_busy"
+	if gate.Banned {
+		code = "binance_banned"
+	}
+	return newUserError(code,
+		"Binance is rate-limiting requests right now — please try again in a moment",
+		map[string]string{"seconds": fmt.Sprintf("%d", gate.SecondsRemaining)})
 }
 
 // executeBuyWithType is the shared buy implementation; buyExecutionType is the operation_type recorded
@@ -168,6 +189,9 @@ func (service *UserTradingService) ExecuteDailyPurchase(operationContext context
 // it cancels the resting take-profit limit sell, places a market sell for the held quantity, and marks
 // the operation sold. Real-money (PRODUCTION) sells require live trading to be enabled, like buys do.
 func (service *UserTradingService) CloseOperationNow(operationContext context.Context, userIdentifier int64, operationIdentifier int64) (*domain.TradingOperation, error) {
+	if cooldownError := failIfBinanceCoolingDown(); cooldownError != nil {
+		return nil, cooldownError
+	}
 	operation, lookupError := service.operationRepository.FindOperationByIdForUser(operationContext, userIdentifier, operationIdentifier)
 	if lookupError != nil {
 		return nil, lookupError
@@ -229,6 +253,9 @@ func (service *UserTradingService) finalizeManualSell(operationContext context.C
 // whose sell order is missing (user-initiated). It is idempotent: a still-live sell order is left in
 // place, and an already-filled one reconciles to sold.
 func (service *UserTradingService) PlaceTakeProfitForOperation(operationContext context.Context, userIdentifier int64, operationIdentifier int64) (*domain.TradingOperation, error) {
+	if cooldownError := failIfBinanceCoolingDown(); cooldownError != nil {
+		return nil, cooldownError
+	}
 	operation, lookupError := service.operationRepository.FindOperationByIdForUser(operationContext, userIdentifier, operationIdentifier)
 	if lookupError != nil {
 		return nil, lookupError

@@ -108,6 +108,26 @@ API on `127.0.0.1:5020`. The DB has no host port (internal only).
 | `migrations`  | `migrate` | golang-migrate SQL         | Versioned DB schema (0001..00NN) |
 | `deploy`      | —         | nginx vhost reference      | Ops reference |
 
+### Reliability, the automation worker & scaling
+
+The robots are driven by a background **automation worker** inside the API process: a monitor loop
+(~30s) that reconciles take-profit fills, runs stop-loss and expires stale sell orders, plus a
+daily-purchase loop that runs each robot's DCA buy once a day. Without it, robots are just config rows.
+
+- **Liveness & alerting.** The worker writes a **heartbeat** every tick (`worker_heartbeat` table).
+  `GET /health/worker` returns **503** when the heartbeat is stale — point an external uptime monitor at
+  it — and a built-in **watchdog emails admins** if the worker stalls while the process is still alive.
+- **Operational status in the UI.** `GET /api/v1/system/status` aggregates worker liveness + the shared
+  Binance rate-limit gate. The light next to "Binance" in the header turns **red** (green = OK) whenever
+  automation is paused, with the reason on hover plus a banner; a manual buy/sell during a Binance
+  cooldown **fails fast** with a clear `binance_busy` message instead of hanging. The Terms disclose that
+  automated operation may pause and resumes automatically once the condition clears.
+- **Singleton worker + scaling.** The worker runs **only on the replica that holds a Postgres advisory
+  lock** (`LeaderLock`), so the stateless HTTP API can be scaled behind a load balancer **without** every
+  replica double-executing daily buys/stop-loss. A load balancer alone does *not* parallelize the worker
+  — it would multiply it; the right path is the leader-lock singleton now, and user **sharding** later
+  (today's bottleneck is the per-IP Binance request-weight limit, not CPU).
+
 ## Local development
 
 ```bash
@@ -134,8 +154,10 @@ history), pagination, toasts and trilingual i18n; the B3/Investidor10 portfolio 
 - **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history; rotation
   still pending (do **not** rotate `CREDENTIALS_ENCRYPTION_KEY` without a re-encrypt migration).
 - **WebSocket user-data + market-price streams** — replace the 30s REST polling; the real fix for the
-  per-IP Binance rate limit as the user base grows.
-- **Leader lock** before running >1 API replica (the worker would otherwise double-execute).
+  per-IP Binance rate limit as the user base grows. (Planned as its own carefully-tested phase.)
+- ~~**Leader lock** before running >1 API replica~~ — **done**: the worker is now a singleton via a
+  Postgres advisory lock (`LeaderLock`), so the API is safe to scale. Next, only when volume needs it:
+  shard users across worker instances.
 - Real server-side pagination for Positions/History; drop the vestigial
   `trading_robots.daily_purchase_enabled` column; remove dead legacy single-user services.
 

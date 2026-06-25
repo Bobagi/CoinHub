@@ -42,6 +42,7 @@ func main() {
 	authTokenRepository := repository.NewPostgresAuthTokenRepository(postgresConnector.Database)
 	accountAccessEventRepository := repository.NewPostgresAccountAccessEventRepository(postgresConnector.Database)
 	agreementAcceptanceRepository := repository.NewPostgresUserAgreementAcceptanceRepository(postgresConnector.Database)
+	workerHeartbeatRepository := repository.NewPostgresWorkerHeartbeatRepository(postgresConnector.Database)
 
 	// Encryption for Binance secrets at rest. Without a key, credential storage is refused at runtime.
 	secretCipher, secretCipherError := security.NewSecretCipher(os.Getenv("CREDENTIALS_ENCRYPTION_KEY"))
@@ -89,7 +90,18 @@ func main() {
 	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService)
 	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, agreementService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
 
-	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, 30*time.Second)
+	// The worker runs as a guaranteed singleton via a Postgres advisory lock, so the stateless HTTP API
+	// can be scaled to several replicas without double-executing daily buys / stop-loss. It pages admins
+	// (OpsAlertService) when its heartbeat goes stale. The lock key is an arbitrary constant shared by
+	// every replica of THIS service ("coinhub1" in hex).
+	const automationWorkerLeaderLockKey int64 = 0x636F696E68756231
+	workerLeaderLock := service.NewLeaderLock(postgresConnector.Database, automationWorkerLeaderLockKey)
+	opsAlertService := service.NewOpsAlertService(userRepository, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
+	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, workerHeartbeatRepository, workerLeaderLock, opsAlertService, 30*time.Second)
+
+	// Operational status (worker liveness + Binance rate-limit gate) for the header indicator + probes.
+	operationalStatusService := service.NewOperationalStatusService(workerHeartbeatRepository)
+	systemHandler := httpserver.NewSystemHandler(sessionService, operationalStatusService, authHandler.CookieName)
 
 	portfolioScraperClient := service.NewPortfolioScraperClient(environmentValueOrDefault("SCRAPER_BASE_URL", "http://scraper:5000"))
 	portfolioHandler := httpserver.NewPortfolioHandler(sessionService, authService, authHandler.CookieName, userPortfolioRepository, portfolioScraperClient)
@@ -101,6 +113,7 @@ func main() {
 	operationsHandler.RegisterRoutes(rootRouter)
 	robotsHandler.RegisterRoutes(rootRouter)
 	portfolioHandler.RegisterRoutes(rootRouter)
+	systemHandler.RegisterRoutes(rootRouter)
 	rootRouter.HandleFunc("/health", func(responseWriter http.ResponseWriter, request *http.Request) {
 		responseWriter.WriteHeader(http.StatusOK)
 		_, _ = responseWriter.Write([]byte("ok"))

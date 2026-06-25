@@ -99,6 +99,11 @@ export function cancelStepUp() {
 // credentials so the header can show the active environment from anywhere.
 export const binanceStatus = writable<{ has_active_credential: boolean; active_environment: string } | null>(null)
 
+// Operational status (worker liveness + Binance rate-limit gate), polled by TopNav. When
+// `operational` is false the header indicator turns red and explains why the bots are paused. Null =
+// not loaded yet (treated as operational, so a slow first fetch never flashes a false alarm).
+export const systemStatus = writable<{ operational: boolean; reasons: { code: string; retry_seconds?: number }[] } | null>(null)
+
 // Minimal hash-based routing — enough for the authenticated views + the email-link pages, without
 // pulling in a router. `reset` and `verify` are reached from email links (#/reset?token=…).
 export type Route = 'dashboard' | 'account' | 'reset' | 'verify' | 'terms' | 'privacy' | 'login'

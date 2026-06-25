@@ -7,7 +7,7 @@ import "time"
 // every prior acceptance row stop matching the current version, so users are required to read and
 // accept the updated terms before they can use money/robot features again. The same tag is shown to
 // the frontend so the consent UI and the recorded version always agree.
-const CurrentAgreementVersion = "2026-06-21.2"
+const CurrentAgreementVersion = "2026-06-25"
 
 // UserAgreementAcceptance is one immutable consent record: a specific user accepted a specific version
 // of the legal documents at a specific time, from a specific IP/user-agent. It is the server-side proof

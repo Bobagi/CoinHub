@@ -74,6 +74,40 @@ face for headings only**, body/UI stays Inter.
 - Verified live via `frontend-review`: font serves 200 under the CSP; Sora renders on landing + dashboard
   + agreement-gate titles; responsive 390/768/1280, no overflow. Commit `eb6ab32`.
 
+## 2026-06-25 session (operational status + worker observability + leader lock)
+The automation worker was a silent single point of failure (if it stalled, robots stopped trading and
+nobody knew) with no user-facing signal when Binance rate-limited us. Built an end-to-end
+**operational-status** system + made the worker observable and safe to scale.
+- **Worker heartbeat (migration 0028 `worker_heartbeat`, single row).** The worker stamps `last_tick_at`
+  on every monitor tick (`WorkerHeartbeatRepository`). `OperationalStatusService` reads it: stale >3min
+  ⇒ "worker_stalled". Verified live: heartbeat advances every ~30s tick.
+- **Leader lock (`service/leader_lock.go`, `pg_try_advisory_lock`, key `0x636F696E68756231`).** The worker
+  runs ONLY on the replica holding the lock, so the stateless API can scale behind a load balancer
+  **without double-executing** daily buys/stop-loss. **Fail-open**: a lock-layer error ⇒ lead anyway
+  (single-instance reality; "no worker" is worse than a theoretical double). Held on a dedicated
+  `*sql.Conn`, released on shutdown/crash so another replica takes over. **Answers the operator's "can we
+  scale the worker?" — LB alone would MULTIPLY the worker (worse); leader-lock singleton now, user
+  sharding later (bottleneck is the per-IP Binance weight, not CPU).**
+- **Watchdog alert (`service/ops_alert_service.go`).** A leader-only loop emails admins
+  (`users.is_admin`) once per stall episode when the heartbeat goes stale (best-effort; no-op without SMTP).
+- **Endpoints:** `GET /api/v1/system/status` (auth) → `{operational, reasons:[{code,retry_seconds}]}`
+  combining worker-stall + the Binance rate-gate; `GET /health/worker` (public) → 503 when stale (point an
+  external uptime monitor at it). `BinanceRateGateStatus()` exposes the shared gate's cooldown/ban.
+- **Header light (`TopNav`) goes RED** when not operational (was green/grey for env): green=operating,
+  grey=no key, **red=bots paused** with the reason on hover (`title`) + a **`StatusBanner`** under the nav;
+  visible on mobile only when red. `systemStatus` store polled every 45s. **Manual buy/sell during a
+  cooldown fail fast** with a translated `binance_busy`/`binance_banned` (`failIfBinanceCoolingDown`),
+  instead of hanging until Retry-After (the worker's DCA is NOT gated — it waits in the transport).
+- **Disclosure everywhere:** Terms risk clause (`agreement.riskBody`, en/pt/es) gained an "automated
+  operation may pause (exchange limits/bans/outages/maintenance), no guarantee of uninterrupted execution,
+  app shows it + auto-resumes" sentence; **`CurrentAgreementVersion` → `2026-06-25`** (everyone re-accepts);
+  README "Reliability, the automation worker & scaling"; in-app `start.reliability` help line. i18n
+  `status.*` + `err.binance_*` (en/pt/es). `frontend-review` (green header + red-state mock + new Terms
+  clause) and `security-review` (no findings) both run.
+- **WebSocket streams (the 3rd ask) — DELIBERATELY DEFERRED, not done.** It's a money-path rewrite of
+  order-fill/ticker polling that can't be safely validated here against real Binance fills. Still backlog
+  #2; do it as its own carefully-tested phase. The leader lock above is the prerequisite it needed.
+
 ## What this is
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It
@@ -288,10 +322,11 @@ VPS — so the IP weight ceiling (~6000/min spot) is the first wall as the user 
 The `AutomationWorker` runs **two goroutines** (monitor loop 30s, daily-purchase loop 5min) that iterate
 all active users **sequentially** inside a **single** API process (one compose replica). Per-user data is
 fully isolated (`WHERE user_id`, per-user encrypted keys/clients), so many users' robots run safely side
-by side. **But there is no leader election / advisory lock** — running >1 API replica would double-execute
-daily buys, stop-loss and reconciles. Daily-buy has partial cross-process protection (DAILY_BUY
-idempotency check in shared DB); stop-loss/reconcile do not. So: **do not scale to >1 replica without a
-leader lock first.** Other ceilings (fine at current scale): users processed serially (one slow user
+by side. **Leader election is now DONE** (2026-06-25, `service/leader_lock.go` + `pg_try_advisory_lock`):
+the worker runs only on the replica holding the advisory lock, so it stays a singleton even with >1 API
+replica — safe to scale the HTTP API behind a load balancer without double-executing daily buys/stop-loss.
+(To parallelize the *work* itself, shard users across instances later — premature now.) Other ceilings
+(fine at current scale): users processed serially (one slow user
 delays the rest, bounded by the 8–10s Binance HTTP timeouts); all Binance REST egresses from one IP, so
 the IP weight limit (above) bites first.
 
@@ -567,8 +602,9 @@ help text. **Be precise: say what we do AND what we don't.**
    rotated).
 2. **WebSocket user-data + market-price streams** — the real fix for the per-IP Binance rate limit
    (replaces 30s `GetOrderStatus`/ticker polling). See the rate-limit section above.
-3. **Leader lock** (e.g. `pg_advisory_lock` or a leadership row) so the worker is safe to run on >1
-   replica; then optionally **multiple egress IPs / proxy sharding**.
+3. ~~**Leader lock** so the worker is safe to run on >1 replica~~ — **DONE 2026-06-25**
+   (`service/leader_lock.go`, `pg_try_advisory_lock`). Remaining: optionally **user sharding** across
+   worker instances + **multiple egress IPs / proxy sharding** (only when volume demands it).
 4. **2FA** (TOTP) — step-up ("sudo") re-auth for money actions is already shipped; full 2FA still
    deferred.
 5. **Per-user email price alerts** — `email_alerts` table exists, the route/UI were not rebuilt after the

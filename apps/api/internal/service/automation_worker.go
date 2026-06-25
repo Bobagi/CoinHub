@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -18,9 +19,25 @@ type dailyPurchaseGuard interface {
 	HasSuccessfulExecutionOfTypeSince(loadContext context.Context, userIdentifier int64, environment string, operationType string, tradingPairSymbol string, since time.Time) (bool, error)
 }
 
+// workerStalledAlerter is notified when the worker's heartbeat goes stale (e.g. a stuck loop while the
+// process is still up), so an operator can be paged. Implemented by OpsAlertService.
+type workerStalledAlerter interface {
+	AlertWorkerStalled(alertContext context.Context, staleFor time.Duration)
+}
+
+// leadershipAcquirer is the worker's view of the leader lock: try to become the single active worker.
+type leadershipAcquirer interface {
+	TryAcquire(acquireContext context.Context) (bool, error)
+	Release(releaseContext context.Context)
+}
+
 // AutomationWorker runs per-user background trading automation: it reconciles filled take-profit
 // orders, enforces stop-loss, and runs the daily DCA purchase. It iterates every active user that
 // has connected Binance credentials.
+//
+// It runs only while it holds leadership (a Postgres advisory lock), so it is a guaranteed singleton
+// even if the API is scaled to several replicas. On every monitor tick it records a heartbeat, and a
+// watchdog alerts operators if that heartbeat goes stale.
 type AutomationWorker struct {
 	userLister          activeUserLister
 	credentialService   *UserCredentialService
@@ -29,6 +46,10 @@ type AutomationWorker struct {
 	executionRepository repository.UserTradingOperationExecutionRepository
 	purchaseGuard       dailyPurchaseGuard
 	tradingService      *UserTradingService
+	heartbeatRepository repository.WorkerHeartbeatRepository
+	leaderLock          leadershipAcquirer
+	alerter             workerStalledAlerter
+	instanceIdentifier  string
 	monitorInterval     time.Duration
 }
 
@@ -40,11 +61,15 @@ func NewAutomationWorker(
 	executionRepository repository.UserTradingOperationExecutionRepository,
 	purchaseGuard dailyPurchaseGuard,
 	tradingService *UserTradingService,
+	heartbeatRepository repository.WorkerHeartbeatRepository,
+	leaderLock leadershipAcquirer,
+	alerter workerStalledAlerter,
 	monitorInterval time.Duration,
 ) *AutomationWorker {
 	if monitorInterval <= 0 {
 		monitorInterval = 30 * time.Second
 	}
+	hostname, _ := os.Hostname()
 	return &AutomationWorker{
 		userLister:          userLister,
 		credentialService:   credentialService,
@@ -53,14 +78,103 @@ func NewAutomationWorker(
 		executionRepository: executionRepository,
 		purchaseGuard:       purchaseGuard,
 		tradingService:      tradingService,
+		heartbeatRepository: heartbeatRepository,
+		leaderLock:          leaderLock,
+		alerter:             alerter,
+		instanceIdentifier:  hostname,
 		monitorInterval:     monitorInterval,
 	}
 }
 
+// Start launches the leadership manager. The trading loops only run on the replica that wins the
+// advisory lock; the rest stay passive (HTTP keeps serving) and periodically retry to take over.
 func (worker *AutomationWorker) Start(applicationContext context.Context) {
-	go worker.runMonitorLoop(applicationContext)
-	go worker.runDailyPurchaseLoop(applicationContext)
-	log.Printf("Automation worker started (monitor interval %s)", worker.monitorInterval)
+	go worker.runLeadership(applicationContext)
+	log.Printf("Automation worker starting (monitor interval %s); awaiting leadership", worker.monitorInterval)
+}
+
+// runLeadership keeps trying to become the single active worker. Once it leads, it starts the trading
+// loops + heartbeat + watchdog and holds leadership for the process lifetime (the advisory lock is held
+// on a dedicated connection that releases on shutdown or crash, letting another replica take over).
+func (worker *AutomationWorker) runLeadership(applicationContext context.Context) {
+	const leadershipRetryInterval = 15 * time.Second
+	for {
+		if applicationContext.Err() != nil {
+			return
+		}
+		acquired, acquireError := worker.leaderLock.TryAcquire(applicationContext)
+		if acquireError != nil {
+			// Fail-open: TryAcquire returns acquired=true on a lock-layer fault so a broken lock never
+			// silently stops ALL trading. With a single replica this is the right call.
+			log.Printf("automation: leader lock errored (%v) — running worker anyway (single-instance assumption)", acquireError)
+		}
+		if !acquired {
+			select {
+			case <-applicationContext.Done():
+				return
+			case <-time.After(leadershipRetryInterval):
+				continue
+			}
+		}
+
+		log.Println("automation: acquired leadership — starting trading loops")
+		worker.recordHeartbeatSafely(applicationContext) // fresh heartbeat immediately on takeover
+		go worker.runMonitorLoop(applicationContext)
+		go worker.runDailyPurchaseLoop(applicationContext)
+		go worker.runWatchdogLoop(applicationContext)
+
+		<-applicationContext.Done()
+		worker.leaderLock.Release(context.Background())
+		log.Println("automation: released leadership on shutdown")
+		return
+	}
+}
+
+// recordHeartbeatSafely stamps the liveness heartbeat; failures are logged, never fatal.
+func (worker *AutomationWorker) recordHeartbeatSafely(parentContext context.Context) {
+	writeContext, cancel := context.WithTimeout(parentContext, 5*time.Second)
+	defer cancel()
+	if heartbeatError := worker.heartbeatRepository.RecordHeartbeat(writeContext, worker.instanceIdentifier); heartbeatError != nil {
+		log.Printf("automation: could not record heartbeat: %v", heartbeatError)
+	}
+}
+
+// runWatchdogLoop emails operators if the heartbeat goes stale (a stuck loop while the process is still
+// alive — a dead process is caught by the external /health/worker probe instead). Debounced: it alerts
+// once per stall episode and re-arms only after the worker recovers.
+func (worker *AutomationWorker) runWatchdogLoop(applicationContext context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	alreadyAlerted := false
+	for {
+		select {
+		case <-applicationContext.Done():
+			return
+		case <-ticker.C:
+			stale, staleFor := worker.heartbeatStale(applicationContext)
+			switch {
+			case stale && !alreadyAlerted:
+				log.Printf("automation: worker heartbeat stale for %s — alerting operators", staleFor.Round(time.Second))
+				if worker.alerter != nil {
+					worker.alerter.AlertWorkerStalled(applicationContext, staleFor)
+				}
+				alreadyAlerted = true
+			case !stale:
+				alreadyAlerted = false
+			}
+		}
+	}
+}
+
+func (worker *AutomationWorker) heartbeatStale(parentContext context.Context) (bool, time.Duration) {
+	readContext, cancel := context.WithTimeout(parentContext, 5*time.Second)
+	defer cancel()
+	lastTickAt, _, loadError := worker.heartbeatRepository.LoadLastTick(readContext)
+	if loadError != nil {
+		return false, 0
+	}
+	since := time.Since(lastTickAt)
+	return since > workerStaleThreshold, since
 }
 
 func (worker *AutomationWorker) runMonitorLoop(applicationContext context.Context) {
@@ -78,6 +192,10 @@ func (worker *AutomationWorker) runMonitorLoop(applicationContext context.Contex
 }
 
 func (worker *AutomationWorker) monitorAllUsers(applicationContext context.Context) {
+	// Record liveness at the START of the tick too: even if listing users or a user step is slow, a
+	// completed tick proves the loop is running. A final stamp below marks a fully-processed tick.
+	worker.recordHeartbeatSafely(applicationContext)
+
 	userIdentifiers, listError := worker.userLister.ListActiveUserIdentifiers(applicationContext)
 	if listError != nil {
 		log.Printf("automation: could not list active users: %v", listError)
@@ -90,6 +208,8 @@ func (worker *AutomationWorker) monitorAllUsers(applicationContext context.Conte
 			worker.monitorUser(applicationContext, userIdentifier)
 		})
 	}
+
+	worker.recordHeartbeatSafely(applicationContext)
 }
 
 // runUserStepSafely runs one user's automation step, recovering from any panic so a single user can

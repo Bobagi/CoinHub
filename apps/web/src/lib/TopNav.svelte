@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
-  import { currentUser, binanceStatus, navigate } from './stores'
+  import { onMount, onDestroy } from 'svelte'
+  import { currentUser, binanceStatus, systemStatus, navigate } from './stores'
   import { api } from './api'
   import { t } from './i18n'
   import LanguageDropdown from './LanguageDropdown.svelte'
@@ -15,6 +15,31 @@
     if (headerEl) document.documentElement.style.setProperty('--topbar-h', `${headerEl.offsetHeight}px`)
   }
   onMount(updateTopbarHeight)
+
+  // Poll operational status so the header light reflects whether the bots can run (red when not). A
+  // transient fetch failure keeps the last known status, so the light never flickers on a blip.
+  let statusTimer: ReturnType<typeof setInterval> | undefined
+  async function refreshSystemStatus() {
+    try {
+      systemStatus.set(await api.systemStatus())
+    } catch {
+      /* keep last known status */
+    }
+  }
+  onMount(() => {
+    refreshSystemStatus()
+    statusTimer = setInterval(refreshSystemStatus, 45000)
+  })
+  onDestroy(() => {
+    if (statusTimer) clearInterval(statusTimer)
+  })
+
+  // null status = not loaded yet ⇒ assume operational (never flash a false alarm before the first poll).
+  $: operational = !$systemStatus || $systemStatus.operational !== false
+  $: statusReasons = $systemStatus?.reasons ?? []
+  $: statusTooltip = operational
+    ? $t('status.operational')
+    : statusReasons.map((reason) => $t('status.' + reason.code)).join(' ')
 
   $: displayName = $currentUser?.display_name?.trim() || $currentUser?.email || ''
 
@@ -55,8 +80,8 @@
   <button class="brand" type="button" on:click={() => navigate('dashboard')}>Coin<span>Hub</span></button>
   <div class="spacer"></div>
   {#if $binanceStatus}
-    <span class="pill binance" title="Binance">
-      <span class="dot" class:on={$binanceStatus.has_active_credential}></span>
+    <span class="pill binance" class:alert={!operational} title={statusTooltip}>
+      <span class="dot" class:on={operational && $binanceStatus.has_active_credential} class:alert={!operational}></span>
       {$t('header.binance')}
       {$binanceStatus.active_environment || $t('header.notConnected')}{#if $binanceStatus.active_environment && !$binanceStatus.has_active_credential} ({$t('header.noKey')}){/if}
     </span>
@@ -103,6 +128,16 @@
   .binance { gap: var(--space-2); }
   .binance .dot { width: 8px; height: 8px; border-radius: var(--radius-pill); background: var(--muted); }
   .binance .dot.on { background: var(--green); box-shadow: 0 0 0 3px rgba(43, 214, 106, 0.18); }
+  /* Operational alert: the environment light turns red and pulses, the pill border warms, and a hover
+     (title) reveals why the bots are paused. */
+  .binance.alert { border-color: var(--red); color: var(--red); }
+  .binance .dot.alert { background: var(--red); box-shadow: 0 0 0 3px rgba(255, 90, 95, 0.2); animation: status-pulse 1.8s ease-out infinite; }
+  @keyframes status-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 90, 95, 0.5); }
+    70% { box-shadow: 0 0 0 6px rgba(255, 90, 95, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 90, 95, 0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .binance .dot.alert { animation: none; } }
   .account { position: relative; }
   .trigger { gap: var(--space-2); padding-inline: 5px; }
   .avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: var(--radius-pill); background: var(--brand); color: var(--on-brand); font-size: var(--text-sm); font-weight: 800; }
@@ -111,5 +146,11 @@
   .caret { font-size: 0.7em; transition: transform 0.15s ease; }
   .caret.up { transform: rotate(180deg); }
   .menu { right: 0; top: calc(100% + 6px); }
-  @media (max-width: 600px) { .who { display: none; } .binance { display: none; } }
+  /* On phones the pill is hidden to save space — but a red operational alert stays visible (the user
+     can't hover, so the Dashboard banner carries the full reason). */
+  @media (max-width: 600px) {
+    .who { display: none; }
+    .binance { display: none; }
+    .binance.alert { display: inline-flex; }
+  }
 </style>

@@ -166,7 +166,20 @@ export interface StepUpStatus {
   expires_at?: string
 }
 
+// Operational status powering the header indicator: whether the trading automation can run right now
+// and, if not, the machine-readable reasons (binance_busy / binance_banned / worker_stalled) the SPA
+// localizes via the status.* i18n keys.
+export interface SystemStatusReason {
+  code: string
+  retry_seconds?: number
+}
+export interface SystemStatus {
+  operational: boolean
+  reasons: SystemStatusReason[]
+}
+
 export const api = {
+  systemStatus: () => request<SystemStatus>('GET', '/api/v1/system/status'),
   signup: (email: string, password: string, displayName: string, locale?: string) =>
     request<User>('POST', '/auth/signup', { email, password, display_name: displayName, locale }),
   login: (email: string, password: string) =>

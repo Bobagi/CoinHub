@@ -584,6 +584,7 @@
       <li>{$t('start.s3')}</li>
       <li>{$t('start.s4')}</li>
     </ol>
+    <p class="muted mt-3">{$t('start.reliability')}</p>
   </Collapsible>
 
   <div class="tabs" role="tablist">

@@ -31,6 +31,7 @@ type binanceRateGate struct {
 	cooldownUntil     time.Time
 	lastUsedWeight    int
 	lastWarnLoggedFor time.Time
+	lastWasBan        bool // the active cooldown came from a 418 IP ban (vs a 429 rate-limit)
 }
 
 var sharedBinanceRateGate = &binanceRateGate{}
@@ -44,6 +45,32 @@ func (gate *binanceRateGate) cooldownRemaining() time.Duration {
 		return 0
 	}
 	return remaining
+}
+
+// BinanceRateGateSnapshot is a read-only view of the shared IP rate-limit gate, for the operational
+// status endpoint and the UI ("bots paused — Binance is rate-limiting").
+type BinanceRateGateSnapshot struct {
+	InCooldown       bool
+	SecondsRemaining int
+	Banned           bool // true when the cooldown is a 418 IP auto-ban (more severe than a 429)
+	LastUsedWeight   int
+}
+
+// BinanceRateGateStatus returns the current state of the process-wide Binance rate-limit gate.
+func BinanceRateGateStatus() BinanceRateGateSnapshot {
+	sharedBinanceRateGate.mutex.Lock()
+	defer sharedBinanceRateGate.mutex.Unlock()
+	remaining := time.Until(sharedBinanceRateGate.cooldownUntil)
+	if remaining < 0 {
+		remaining = 0
+	}
+	inCooldown := remaining > 0
+	return BinanceRateGateSnapshot{
+		InCooldown:       inCooldown,
+		SecondsRemaining: int(remaining.Seconds() + 0.999), // round up so "0s" never shows while still cooling
+		Banned:           inCooldown && sharedBinanceRateGate.lastWasBan,
+		LastUsedWeight:   sharedBinanceRateGate.lastUsedWeight,
+	}
 }
 
 // observe inspects a Binance response: it records the used weight and, on 429/418, arms the shared
@@ -75,6 +102,7 @@ func (gate *binanceRateGate) observe(response *http.Response) {
 		if until.After(gate.cooldownUntil) {
 			gate.cooldownUntil = until
 		}
+		gate.lastWasBan = response.StatusCode == http.StatusTeapot
 		gate.lastUsedWeight = usedWeight
 		gate.mutex.Unlock()
 		log.Printf("binance: rate limit hit (status %d, used weight %d) — backing off all requests for %s", response.StatusCode, usedWeight, cooldown)
