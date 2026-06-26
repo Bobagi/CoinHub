@@ -103,7 +103,10 @@ func main() {
 	workerShardCount, workerShardIndex := workerShardFromEnv()
 	workerLeaderLock := service.NewLeaderLock(postgresConnector.Database, automationWorkerLeaderLockKey+int64(workerShardIndex))
 	opsAlertService := service.NewOpsAlertService(userRepository, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
-	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, workerHeartbeatRepository, workerLeaderLock, opsAlertService, workerShardCount, workerShardIndex, 30*time.Second)
+	// Data-minimization (LGPD): the leader prunes the durable sign-in log (IP/UA/approx-location PII) older
+	// than the retention window. ACCESS_LOG_RETENTION_DAYS (default 180; 0 = keep until account deletion).
+	retentionService := service.NewRetentionService(accountAccessEventRepository, accessLogRetentionFromEnv())
+	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, workerHeartbeatRepository, workerLeaderLock, opsAlertService, retentionService, workerShardCount, workerShardIndex, 30*time.Second)
 
 	// Operational status (worker liveness + Binance rate-limit gate) for the header indicator + probes.
 	operationalStatusService := service.NewOperationalStatusService(workerHeartbeatRepository)
@@ -175,6 +178,21 @@ func sessionLifetimeFromEnv(fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(hours) * time.Hour
+}
+
+// accessLogRetentionFromEnv reads ACCESS_LOG_RETENTION_DAYS — how long the durable sign-in log (which
+// holds IP / user-agent / approximate-location PII) is kept before automatic deletion, for LGPD
+// data-minimization. Defaults to 180 days; 0 disables the automatic purge (rows are then kept until the
+// account is deleted, which already erases them via cascade). Invalid values fall back to the default.
+func accessLogRetentionFromEnv() time.Duration {
+	const defaultDays = 180
+	days := defaultDays
+	if raw := os.Getenv("ACCESS_LOG_RETENTION_DAYS"); raw != "" {
+		if parsed, parseError := strconv.Atoi(raw); parseError == nil && parsed >= 0 {
+			days = parsed
+		}
+	}
+	return time.Duration(days) * 24 * time.Hour
 }
 
 // workerShardFromEnv reads WORKER_SHARD_COUNT (how many parallel worker instances exist) and

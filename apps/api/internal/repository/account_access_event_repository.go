@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"coin-hub/internal/domain"
 )
@@ -17,6 +18,10 @@ type AccountAccessEventRepository interface {
 	CountForUser(operationContext context.Context, userIdentifier int64) (int, error)
 	// ListForUser returns the user's accesses, newest first, paged.
 	ListForUser(operationContext context.Context, userIdentifier int64, limit int, offset int) ([]domain.AccountAccessEvent, error)
+	// PurgeOlderThan deletes access events created before cutoff (retention / data-minimization) and
+	// returns how many rows were removed. Not user-scoped: it runs across all users from a leader-gated
+	// maintenance loop, not a request handler.
+	PurgeOlderThan(operationContext context.Context, cutoff time.Time) (int64, error)
 }
 
 type PostgresAccountAccessEventRepository struct {
@@ -69,6 +74,18 @@ func (repository *PostgresAccountAccessEventRepository) CountForUser(operationCo
 		userIdentifier,
 	).Scan(&total)
 	return total, scanError
+}
+
+func (repository *PostgresAccountAccessEventRepository) PurgeOlderThan(operationContext context.Context, cutoff time.Time) (int64, error) {
+	result, executionError := repository.Database.ExecContext(
+		operationContext,
+		`DELETE FROM account_access_events WHERE created_at < $1`,
+		cutoff,
+	)
+	if executionError != nil {
+		return 0, executionError
+	}
+	return result.RowsAffected()
 }
 
 func (repository *PostgresAccountAccessEventRepository) ListForUser(operationContext context.Context, userIdentifier int64, limit int, offset int) ([]domain.AccountAccessEvent, error) {

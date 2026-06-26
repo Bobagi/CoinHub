@@ -181,13 +181,18 @@ tracking"** — the app contradicted its own policy and tracked without consent 
 - Reviews: `security-review` on the diff = **no findings** (the injected `<script>` src is a hardcoded constant,
   no tainted input; net privacy improvement). NOTE Chrome DevTools MCP was not wired as callable tools this
   session, so runtime gating was verified at the build/served-HTML/header level, not a live network trace.
-- **Remaining privacy/security points raised (operator/follow-up, NOT done):** (1) **Retention policy for
-  `account_access_events`** — IP+UA+geolocation are kept indefinitely (erased only on account delete); LGPD data
-  minimization wants an auto-purge after N months (add a worker sweep / `DELETE WHERE created_at < now()-interval`).
-  (2) **Secret rotation + git-history purge** (backlog #1 — Binance/DB/SMTP creds in commit `d891d08`; destructive,
-  `CREDENTIALS_ENCRYPTION_KEY` must stay stable). (3) `CREDENTIALS_ENCRYPTION_KEY` reused for HMAC — acceptable,
-  HKDF subkeys cleaner (already noted in the 2026-06-25 audit). (4) Umami `data-do-not-track` could honor browser
-  DNT as an extra signal (minor; opt-in already covers it). (5) Cookie banner does NOT suppress while the
+- **Access-log retention — DONE (data-minimization, LGPD).** `account_access_events` (IP+UA+approx-location PII)
+  used to be kept indefinitely (erased only on account delete). Now a **leader-gated purge loop** in the worker
+  (`runRetentionLoop`, started in `runLeadership`) deletes rows older than **`ACCESS_LOG_RETENTION_DAYS`** (default
+  **180**; `0` = keep until account deletion) — purges on takeover + every 12h. Logic in `service/retention_service.go`
+  (`RetentionService.PurgeExpiredAccessEvents`, best-effort/nil-safe) → `AccountAccessEventRepository.PurgeOlderThan`
+  (`DELETE … WHERE created_at < $1`, not user-scoped — it's a maintenance sweep, not a request). Verified live:
+  "access-log retention enabled (4320h); purging now and every 12h", purge ran with no error (0 rows >180d so far).
+- **Remaining privacy/security points raised (operator/follow-up, NOT done):**
+  (1) **Secret rotation + git-history purge** (backlog #1 — Binance/DB/SMTP creds in commit `d891d08`; destructive,
+  `CREDENTIALS_ENCRYPTION_KEY` must stay stable). (2) `CREDENTIALS_ENCRYPTION_KEY` reused for HMAC — acceptable,
+  HKDF subkeys cleaner (already noted in the 2026-06-25 audit). (3) Umami `data-do-not-track` could honor browser
+  DNT as an extra signal (minor; opt-in already covers it). (4) Cookie banner does NOT suppress while the
   AgreementGate is up — both can show at once for a brand-new signup (acceptable; independent consents).
 
 ## What this is

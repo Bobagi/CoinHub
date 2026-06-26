@@ -52,6 +52,7 @@ type AutomationWorker struct {
 	heartbeatRepository repository.WorkerHeartbeatRepository
 	leaderLock          leadershipAcquirer
 	alerter             workerStalledAlerter
+	retentionService    *RetentionService
 	instanceIdentifier  string
 	shardCount          int
 	shardIndex          int
@@ -73,6 +74,7 @@ func NewAutomationWorker(
 	heartbeatRepository repository.WorkerHeartbeatRepository,
 	leaderLock leadershipAcquirer,
 	alerter workerStalledAlerter,
+	retentionService *RetentionService,
 	shardCount int,
 	shardIndex int,
 	monitorInterval time.Duration,
@@ -98,6 +100,7 @@ func NewAutomationWorker(
 		heartbeatRepository: heartbeatRepository,
 		leaderLock:          leaderLock,
 		alerter:             alerter,
+		retentionService:    retentionService,
 		instanceIdentifier:  hostname,
 		shardCount:          shardCount,
 		shardIndex:          shardIndex,
@@ -149,6 +152,7 @@ func (worker *AutomationWorker) runLeadership(applicationContext context.Context
 		go worker.runMonitorLoop(applicationContext)
 		go worker.runDailyPurchaseLoop(applicationContext)
 		go worker.runWatchdogLoop(applicationContext)
+		go worker.runRetentionLoop(applicationContext)
 
 		<-applicationContext.Done()
 		worker.leaderLock.Release(context.Background())
@@ -202,6 +206,31 @@ func (worker *AutomationWorker) heartbeatStale(parentContext context.Context) (b
 	}
 	since := time.Since(lastTickAt)
 	return since > workerStaleThreshold, since
+}
+
+// accessLogPurgeInterval is how often the leader prunes the durable sign-in log to enforce the
+// configured retention window. The purge is a date-bounded, idempotent DELETE, so a frequent tick is
+// cheap and means even short-lived processes enforce retention; it is leader-gated (started from
+// runLeadership), so only one replica ever runs it.
+const accessLogPurgeInterval = 12 * time.Hour
+
+func (worker *AutomationWorker) runRetentionLoop(applicationContext context.Context) {
+	if worker.retentionService == nil || worker.retentionService.AccessLogRetention() <= 0 {
+		return // retention disabled — keep the access log until accounts are deleted
+	}
+	log.Printf("automation: access-log retention enabled (%s); purging now and every %s",
+		worker.retentionService.AccessLogRetention(), accessLogPurgeInterval)
+	worker.retentionService.PurgeExpiredAccessEvents(applicationContext) // enforce immediately on takeover
+	ticker := time.NewTicker(accessLogPurgeInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-applicationContext.Done():
+			return
+		case <-ticker.C:
+			worker.retentionService.PurgeExpiredAccessEvents(applicationContext)
+		}
+	}
 }
 
 func (worker *AutomationWorker) runMonitorLoop(applicationContext context.Context) {
