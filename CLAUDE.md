@@ -8,26 +8,32 @@ truth so you don't have to re-derive the project each session.
 > `frontend-review` (auditar a UI), `security-guidance`/`/security-review` (app que guarda chaves
 > Binance), `claude-md-management` (manter este arquivo). Política completa em `~/.claude/CLAUDE.md`.
 
-> ## ▶ CONTINUE AQUI (handoff — 2026-06-25)
+> ## ▶ CONTINUE AQUI (handoff — 2026-06-26)
 > Plugins **carregando OK** — `claude plugin list` mostra os **5 enabled** (`frontend-design`,
 > `claude-md-management`, `security-guidance` [hook-based, sem skill invocável], `feature-dev`,
 > `chrome-devtools-mcp`). Se algum der `Unknown skill`, a sessão não recarregou — restart limpo.
+> **Gotcha:** numa sessão recente o `chrome-devtools-mcp` apareceu como **skills** mas NÃO como
+> **ferramentas MCP chamáveis** → verificação de browser ao vivo ficou no nível de build/headers, não
+> trace de rede. Se precisar do trace, confirme as ferramentas MCP antes (`ToolSearch`/restart).
 >
-> **As duas tarefas do handoff anterior estão FEITAS (a + b).** Próximos itens reais: ver TODO/backlog.
-> Lembrete de mercado (análise anterior): maiores gaps pré-lançamento = **backup do Postgres, testes no
-> core de ordens, monitoramento do worker**.
+> **Últimas sessões — todas NO AR + commitadas em `main` (ver seções datadas abaixo):**
+> - **Cookie consent LIVE + analytics gated + privacy hardening** (commit `a78c4e3`): Umami só carrega
+>   após `cookieConsent==='accepted'` (`lib/analytics.ts`); banner shown + "Manage cookies"; política de
+>   privacidade corrigida (antes dizia "no tracking" e rastreava!) + `CurrentAgreementVersion→2026-06-26`
+>   (todos re-aceitam); header `Permissions-Policy`. Regra durável em **Conventions**.
+> - **Retenção do log de acesso** (commit `4652d3b`): purga leader-gated + `ACCESS_LOG_RETENTION_DAYS`
+>   (default 180d; `0`=manter até deletar a conta).
+> - **WebSocket market stream + worker sharding/proxy + fix daily-buy atrasado** (sessão 2026-06-26).
 >
-> **(a) Hero da landing — FEITO (commit `9e243ce`, no ar).** Redesenho via plugin `frontend-design`:
-> hero virou split assimétrico — claim à esquerda + um **"console de robô ao vivo"** à direita (tape
-> monospace DCA→take-profit→vendido, chip Testnet, dot LIVE pulsante, legenda não-custodial). Dentro do
-> design system gold+dark (só monospace nova, escopada p/ os dados); i18n trilíngue `landing.hero.demo.*`;
-> console `aria-hidden`; reflow 2-col→1-col em 860px. `frontend-review` rodado e **limpo** (P0/P1/P2 = 0;
-> relatório em `.claude/frontend-review/2026-06-25-hero/`).
->
-> **(b) Auditoria de segurança do backend (`security-guidance`) — FEITA (commit `8c7e7b7`).** Veja a
-> seção **"Security audit 2026-06-25 (backend, via security-guidance)"** abaixo. Resultado: backend
-> sólido; **1 correção** aplicada (IP forjável no log de acesso → usa `X-Real-IP`). `chrome-devtools-mcp`
-> (Google oficial) disponível p/ inspeção de browser ao vivo — complementa o `frontend-review`.
+> **PRÓXIMOS ITENS REAIS (maiores gaps pré-lançamento, NÃO feitos — verificados nesta sessão):**
+> 1. **Backup do Postgres** — NÃO existe (sem `pg_dump`/cron no repo nem no host). Perder o volume
+>    `coin-hub_db_data` = perder chaves Binance criptografadas + histórico. **Gap #1 antes de lançar.**
+> 2. **Testes no core de ordens** — só há `portfolio_handler_test.go`; o caminho do dinheiro
+>    (`UserTradingService`/`AutomationWorker`) tem **zero** testes.
+> 3. Backlog: user-data WS push precisa de chaves **Ed25519** (#2), rotação de segredos + purge do git
+>    (#1), 2FA TOTP (#4). Ver TODO/backlog.
+> (O 3º gap pré-lançamento da análise de mercado — **monitoramento do worker** — JÁ está feito:
+> operational-status + heartbeat + watchdog + leader lock, sessão 2026-06-25.)
 
 ## Security audit 2026-06-25 (backend, via `security-guidance` plugin)
 Full pass over `apps/api` (Go), focused on the four areas the operator named: Binance-key handling,
