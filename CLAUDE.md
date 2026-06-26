@@ -151,6 +151,45 @@ socket bug can only make reconciliation slower, never wrong.** New dep: `github.
   follow-up if the operator wants exact-time control: add **minute-level scheduling** (`daily_purchase_minute`
   + UI minute picker) so a buy fires at a chosen HH:MM, not just the top of the hour.
 
+## 2026-06-26 session (cookie consent LIVE + analytics gated on consent + privacy hardening)
+Operator asked for a working cookie banner where **no non-essential script runs until the user accepts**, plus
+a sweep of other security/privacy gaps. Root issue found: **Umami analytics loaded unconditionally** for every
+visitor via a static `<script>` in `index.html`, while the **Privacy Policy literally claimed "not used for
+tracking"** — the app contradicted its own policy and tracked without consent (LGPD).
+- **Analytics now opt-in (`apps/web/src/lib/analytics.ts`, new).** Removed the static Umami tag from
+  `index.html`; `initAnalyticsConsent()` (called from `main.ts`) subscribes to `cookieConsent` and injects the
+  Umami script **only when `=== 'accepted'`**. Reject / no-decision ⇒ the script is never added, zero requests
+  to `analytics.bobagi.space`. Returning visitors who accepted are re-loaded from localStorage. Verified: served
+  `index.html` has 0 static analytics refs; host now only in the JS bundle (the gated loader).
+- **Banner actually shows.** `CookieConsent.svelte` was dormant (gated on `adsEnabled=false`). Added
+  `analyticsEnabled=true` + `consentRequired = analyticsEnabled || adsEnabled` in `stores.ts`; banner shows when
+  `consentRequired && cookieConsent===null` (covers logged-out visitors too — it's rendered outside the route
+  switch in `App.svelte`). Accept/Reject kept equal-prominence (no dark pattern).
+- **Withdraw consent (LGPD).** `resetCookieConsent()` clears the stored choice; a **"Manage cookies"** link in
+  `LegalFooter` calls it + `location.reload()` so any script loaded earlier in the session is dropped and the
+  banner reappears. i18n `cookie.manage` (en/pt/es).
+- **Privacy Policy fixed + re-consent forced.** `privacy.cookiesBody` (en/pt/es) now truthfully discloses the
+  self-hosted Umami analytics + opt-in + how to withdraw; `cookie.message` mentions analytics. **Bumped
+  `domain.CurrentAgreementVersion` → `2026-06-26`** + `privacy.effective` → 26 June 2026, so **everyone
+  re-accepts** the corrected policy via the AgreementGate (the operator/admin too). The AgreementGate's own
+  privacy summary already named "analytics providers" generically — no contradiction left.
+- **Permissions-Policy header added** (nginx vhost — live + `deploy/nginx/` reference; `nginx -t && reload` done):
+  `geolocation=(), camera=(), microphone=(), payment=(), usb=(), interest-cohort=(), browsing-topics=()` — denies
+  browser features the app never uses (geo is server-side from IP) and **opts out of FLoC/Topics ad-targeting**.
+  Verified live in response headers. CSP already allowed the analytics host (script-src/connect-src) so dynamic
+  injection needs no CSP change.
+- Reviews: `security-review` on the diff = **no findings** (the injected `<script>` src is a hardcoded constant,
+  no tainted input; net privacy improvement). NOTE Chrome DevTools MCP was not wired as callable tools this
+  session, so runtime gating was verified at the build/served-HTML/header level, not a live network trace.
+- **Remaining privacy/security points raised (operator/follow-up, NOT done):** (1) **Retention policy for
+  `account_access_events`** — IP+UA+geolocation are kept indefinitely (erased only on account delete); LGPD data
+  minimization wants an auto-purge after N months (add a worker sweep / `DELETE WHERE created_at < now()-interval`).
+  (2) **Secret rotation + git-history purge** (backlog #1 — Binance/DB/SMTP creds in commit `d891d08`; destructive,
+  `CREDENTIALS_ENCRYPTION_KEY` must stay stable). (3) `CREDENTIALS_ENCRYPTION_KEY` reused for HMAC — acceptable,
+  HKDF subkeys cleaner (already noted in the 2026-06-25 audit). (4) Umami `data-do-not-track` could honor browser
+  DNT as an extra signal (minor; opt-in already covers it). (5) Cookie banner does NOT suppress while the
+  AgreementGate is up — both can show at once for a brand-new signup (acceptable; independent consents).
+
 ## What this is
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It
@@ -591,10 +630,10 @@ the front, kept on purpose because the donut/profitability need the full set (do
   - **`GET /api/v1/account/agreement`** (current vs accepted version + date) → shown in `AccountSettings`
     ("you accepted version X on <date>"). **Tax-responsibility reminder** (`prof.taxNote`) under the
     profitability panel.
-  - **Cookie-consent mechanism built but DORMANT** (`CookieConsent.svelte` + `cookieConsent` store +
-    `stores.adsEnabled=false`): no banner shown until ads are enabled (CoinHub sets only the essential
-    session cookie today). **To enable ads: flip `adsEnabled=true` and gate the ad/analytics script on
-    `cookieConsent==='accepted'`.**
+  - **Cookie-consent mechanism built (banner went LIVE 2026-06-26 for analytics; see that session).**
+    `analyticsEnabled=true` ⇒ the banner shows and **Umami loads only on accept** (`lib/analytics.ts`).
+    `adsEnabled` is still `false`. **To enable ads:** flip `adsEnabled=true` (banner copy/clauses already
+    cover ads) and gate the ad script on `cookieConsent==='accepted'` the same way analytics is gated.
   - **Can't be done in code (operator/lawyer/provider):** lawyer review + CVM opinion on the paid robot;
     CNPJ + invoicing; secret rotation + git-history purge (backlog #1, credential-bound + destructive);
     AdSense eligibility/approval; the subscription cancel/refund *flow* (billing not built, backlog #8);
@@ -661,9 +700,9 @@ help text. **Be precise: say what we do AND what we don't.**
 8. **Robot monetization + advertising** — standard users are capped at 1 robot/environment
    (`StandardUserRobotLimitPerEnvironment`), admins unlimited. **Not built:** the billing/subscription
    system itself, including a **cancel/refund flow honoring the 7-day CDC art.49 withdrawal** (the
-   *right* is already stated in the Terms). Ads: the **cookie-consent banner is built but dormant**
-   (`CookieConsent.svelte` + `stores.adsEnabled=false`) — to enable ads, flip `adsEnabled` and gate the
-   ad/analytics script on `cookieConsent==='accepted'`. **Operator/legal prerequisites before charging
+   *right* is already stated in the Terms). Ads: the **cookie-consent banner is now LIVE** (analytics is
+   already gated on consent, 2026-06-26) — to enable ads, flip `stores.adsEnabled=true` and gate the ad
+   script on `cookieConsent==='accepted'` like `lib/analytics.ts` does. **Operator/legal prerequisites before charging
    or running ads** (can't be done in code): lawyer review + a **CVM "is the paid robot administração de
    carteira?" opinion**, a **CNPJ + invoicing**, and **AdSense eligibility** (crypto is restricted). All
    tracked with status in `legal-audit-2026-06-21.md` §3/§3a.

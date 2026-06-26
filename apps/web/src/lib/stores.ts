@@ -171,13 +171,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => { route.set(routeFromHash()); scrollToTop() })
 }
 
-// --- Cookie / advertising consent (LGPD) -------------------------------------------------------
-// CoinHub itself sets only one strictly-necessary cookie (the session), which doesn't require consent.
-// The banner + consent state exist for when ADVERTISING (third-party tracking cookies) is turned on:
-// flip `adsEnabled` to true and the banner appears; any ad/analytics script must be gated on
-// `cookieConsent === 'accepted'`. Kept dormant (no banner shown) until then, so we don't ask for
-// consent we don't yet need. The user's choice persists in localStorage.
+// --- Cookie / non-essential script consent (LGPD) ----------------------------------------------
+// CoinHub sets only one strictly-necessary cookie (the session), which doesn't require consent.
+// Everything NON-essential is opt-in and must be gated on `cookieConsent === 'accepted'`:
+//   - analyticsEnabled: self-hosted Umami product analytics (cookieless, but still opt-in). Loaded
+//     by lib/analytics.ts only after acceptance.
+//   - adsEnabled: third-party advertising/tracking (not turned on yet).
+// The banner (CookieConsent.svelte) is shown whenever a non-essential script needs consent and the
+// user hasn't decided. The user's choice persists in localStorage; it can be withdrawn/changed via
+// resetCookieConsent() ("Manage cookies").
+export const analyticsEnabled = true
 export const adsEnabled = false
+export const consentRequired = analyticsEnabled || adsEnabled
 
 export type CookieChoice = 'accepted' | 'rejected'
 const COOKIE_CONSENT_KEY = 'coinhub_cookie_consent'
@@ -193,4 +198,12 @@ export const cookieConsent = writable<CookieChoice | null>(readCookieConsent())
 export function setCookieConsent(choice: CookieChoice) {
   if (typeof localStorage !== 'undefined') localStorage.setItem(COOKIE_CONSENT_KEY, choice)
   cookieConsent.set(choice)
+}
+
+// Withdraw/change a previous choice (LGPD: revoking consent must be as easy as giving it). Clears the
+// stored decision so the banner reappears. Callers reload the page afterwards so any already-loaded
+// non-essential script (e.g. Umami injected earlier this session) is dropped until the user re-decides.
+export function resetCookieConsent() {
+  if (typeof localStorage !== 'undefined') localStorage.removeItem(COOKIE_CONSENT_KEY)
+  cookieConsent.set(null)
 }

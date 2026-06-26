@@ -127,7 +127,8 @@
 <!-- Global "popcorn" toast notifications (transient success/error feedback), mounted once. -->
 <Toasts />
 
-<!-- Cookie/advertising consent banner (LGPD). Dormant until ads are enabled (see stores.adsEnabled). -->
+<!-- Cookie / non-essential-script consent banner (LGPD). Shown to undecided visitors; analytics (and,
+     later, ads) load only after Accept. Rendered outside the route switch so it covers every screen. -->
 <CookieConsent />
 
 <style>

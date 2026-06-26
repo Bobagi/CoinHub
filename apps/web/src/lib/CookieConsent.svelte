@@ -1,13 +1,13 @@
 <script lang="ts">
-  // Cookie / advertising consent banner (LGPD). CoinHub itself sets only the strictly-necessary session
-  // cookie (no consent required), so this banner stays HIDDEN until advertising is turned on
-  // (stores.adsEnabled = true). When shown, the user's choice is persisted; any third-party ad/analytics
-  // script must check `cookieConsent === 'accepted'` before loading. Built now so enabling ads is a one
-  // flag flip, without shipping a consent prompt we don't yet need.
-  import { adsEnabled, cookieConsent, setCookieConsent, navigate } from './stores'
+  // Cookie / non-essential-script consent banner (LGPD). The strictly-necessary session cookie needs
+  // no consent; everything else (analytics now, advertising later) is opt-in. The banner is shown
+  // whenever a non-essential script needs consent (`consentRequired`) and the user hasn't decided yet.
+  // The choice persists in localStorage; analytics/ads scripts load only when `cookieConsent === 'accepted'`
+  // (see lib/analytics.ts). Accept and Reject are given equal prominence (no dark patterns).
+  import { consentRequired, cookieConsent, setCookieConsent, navigate } from './stores'
   import { t } from './i18n'
 
-  $: visible = adsEnabled && $cookieConsent === null
+  $: visible = consentRequired && $cookieConsent === null
 </script>
 
 {#if visible}

@@ -1,7 +1,14 @@
 <script lang="ts">
   import { t } from './i18n'
-  import { navigate } from './stores'
+  import { navigate, resetCookieConsent, consentRequired } from './stores'
   import Collapsible from './Collapsible.svelte'
+
+  // Withdraw/change cookie consent (LGPD: as easy to revoke as to give). Clear the stored choice and
+  // reload so any non-essential script loaded earlier this session is dropped and the banner reappears.
+  function manageCookies() {
+    resetCookieConsent()
+    if (typeof location !== 'undefined') location.reload()
+  }
 </script>
 
 <footer class="legal">
@@ -16,6 +23,10 @@
     <button type="button" class="link-btn" on:click={() => navigate('terms')}>{$t('legal.viewTerms')}</button>
     <span aria-hidden="true">·</span>
     <button type="button" class="link-btn" on:click={() => navigate('privacy')}>{$t('legal.viewPrivacy')}</button>
+    {#if consentRequired}
+      <span aria-hidden="true">·</span>
+      <button type="button" class="link-btn" on:click={manageCookies}>{$t('cookie.manage')}</button>
+    {/if}
   </nav>
 </footer>
 

@@ -418,16 +418,17 @@ const en: Dictionary = {
   'account.terms.pending': 'A newer version is in force — you will be asked to accept it.',
   'account.terms.never': "You haven't accepted the current Terms yet.",
 
-  // Cookie consent banner (LGPD) — shown only when advertising is enabled.
+  // Cookie / non-essential-script consent banner (LGPD).
   'cookie.title': 'Cookies',
-  'cookie.message': 'We use one necessary cookie to keep you signed in. With your consent, advertising partners may also set cookies.',
+  'cookie.message': 'We use one strictly-necessary cookie to keep you signed in. With your consent we also load privacy-friendly usage analytics to improve CoinHub; nothing non-essential runs until you accept.',
   'cookie.learnMore': 'Learn more',
   'cookie.accept': 'Accept',
   'cookie.reject': 'Reject non-essential',
+  'cookie.manage': 'Manage cookies',
 
   // Privacy Policy (full standalone document at #/privacy).
   'privacy.title': 'Privacy Policy',
-  'privacy.effective': 'In force since 21 June 2026.',
+  'privacy.effective': 'In force since 26 June 2026.',
   'privacy.intro': 'This Privacy Policy explains what personal data CoinHub collects, why, how it is protected, who we share it with, and the rights you have under Brazil’s LGPD (Lei 13.709/2018). CoinHub is operated by Bobagi (Gustavo Perin).',
   'privacy.controllerTitle': '1. Who controls your data',
   'privacy.controllerBody': 'The data controller is Bobagi (Gustavo Perin), operator of CoinHub at coin.bobagi.space. For any privacy request or question, and to reach the person responsible for data protection, write to bobagi.contact@gmail.com.',
@@ -446,7 +447,7 @@ const en: Dictionary = {
   'privacy.securityTitle': '8. How we protect it',
   'privacy.securityBody': 'Binance keys are encrypted at rest (AES-256-GCM). Access is over HTTPS; sessions are stored only as hashes; sensitive actions require re-authentication. No system is perfectly secure, so we cannot guarantee absolute security, but we apply reasonable technical and organizational measures.',
   'privacy.cookiesTitle': '9. Cookies',
-  'privacy.cookiesBody': 'CoinHub uses a single strictly-necessary cookie to keep you signed in; it is required for the service and is not used for tracking. If advertising is enabled in the future, advertising/analytics partners may set additional cookies, and we will ask for your consent through a cookie banner before they are used.',
+  'privacy.cookiesBody': 'CoinHub uses a single strictly-necessary cookie to keep you signed in; it is required for the service and is not used for tracking. We also use a self-hosted, privacy-friendly analytics tool (Umami) to understand product usage; it is non-essential and loads only after you accept through the cookie banner — if you reject or do nothing, it never runs. You can withdraw or change your choice at any time via "Manage cookies" in the footer. If advertising is enabled in the future, advertising partners may set additional cookies, also only with your prior consent.',
   'privacy.rightsTitle': '10. Your rights',
   'privacy.rightsBody': 'You may confirm whether we process your data and access it, correct it, request deletion or portability, ask about sharing, and withdraw consent. You can do much of this in Account settings (including permanent account deletion), or contact us at the address above. You may also complain to Brazil’s data-protection authority (ANPD).',
   'privacy.childrenTitle': '11. Children',
@@ -897,16 +898,17 @@ const pt: Dictionary = {
   'account.terms.pending': 'Há uma versão mais recente em vigor — você será solicitado a aceitá-la.',
   'account.terms.never': 'Você ainda não aceitou os Termos atuais.',
 
-  // Banner de cookies (LGPD) — exibido apenas quando a publicidade estiver ativa.
+  // Banner de consentimento de cookies / scripts não essenciais (LGPD).
   'cookie.title': 'Cookies',
-  'cookie.message': 'Usamos um cookie necessário para manter você conectado. Com o seu consentimento, parceiros de publicidade também podem usar cookies.',
+  'cookie.message': 'Usamos um cookie estritamente necessário para manter você conectado. Com o seu consentimento, também carregamos uma análise de uso respeitosa à privacidade para melhorar o CoinHub; nada não essencial roda até você aceitar.',
   'cookie.learnMore': 'Saiba mais',
   'cookie.accept': 'Aceitar',
   'cookie.reject': 'Recusar não essenciais',
+  'cookie.manage': 'Gerenciar cookies',
 
   // Política de Privacidade (documento completo em #/privacy).
   'privacy.title': 'Política de Privacidade',
-  'privacy.effective': 'Em vigor desde 21 de junho de 2026.',
+  'privacy.effective': 'Em vigor desde 26 de junho de 2026.',
   'privacy.intro': 'Esta Política de Privacidade explica quais dados pessoais o CoinHub coleta, por quê, como são protegidos, com quem são compartilhados e quais direitos você tem sob a LGPD (Lei 13.709/2018). O CoinHub é operado pela Bobagi (Gustavo Perin).',
   'privacy.controllerTitle': '1. Quem controla seus dados',
   'privacy.controllerBody': 'O controlador dos dados é a Bobagi (Gustavo Perin), operadora do CoinHub em coin.bobagi.space. Para qualquer solicitação ou dúvida de privacidade, e para falar com o responsável pela proteção de dados (encarregado), escreva para bobagi.contact@gmail.com.',
@@ -925,7 +927,7 @@ const pt: Dictionary = {
   'privacy.securityTitle': '8. Como protegemos',
   'privacy.securityBody': 'As chaves da Binance são criptografadas em repouso (AES-256-GCM). O acesso é por HTTPS; as sessões são guardadas apenas como hashes; ações sensíveis exigem reautenticação. Nenhum sistema é perfeitamente seguro, então não podemos garantir segurança absoluta, mas aplicamos medidas técnicas e organizacionais razoáveis.',
   'privacy.cookiesTitle': '9. Cookies',
-  'privacy.cookiesBody': 'O CoinHub usa um único cookie estritamente necessário para manter você conectado; ele é exigido pelo serviço e não é usado para rastreamento. Se a publicidade for ativada no futuro, parceiros de publicidade/análise poderão definir cookies adicionais, e pediremos o seu consentimento por meio de um banner de cookies antes que sejam usados.',
+  'privacy.cookiesBody': 'O CoinHub usa um único cookie estritamente necessário para manter você conectado; ele é exigido pelo serviço e não é usado para rastreamento. Também usamos uma ferramenta de análise auto-hospedada e respeitosa à privacidade (Umami) para entender o uso do produto; ela é não essencial e só carrega depois que você aceita no banner de cookies — se você recusar ou não fizer nada, ela nunca roda. Você pode retirar ou alterar a sua escolha a qualquer momento em "Gerenciar cookies", no rodapé. Se a publicidade for ativada no futuro, parceiros de publicidade poderão definir cookies adicionais, também apenas com o seu consentimento prévio.',
   'privacy.rightsTitle': '10. Seus direitos',
   'privacy.rightsBody': 'Você pode confirmar se tratamos seus dados e acessá-los, corrigi-los, pedir exclusão ou portabilidade, perguntar sobre compartilhamento e revogar o consentimento. Você pode fazer boa parte disso em Configurações da conta (inclusive a exclusão definitiva da conta), ou falar conosco no endereço acima. Você também pode reclamar à ANPD.',
   'privacy.childrenTitle': '11. Crianças e adolescentes',
@@ -1376,16 +1378,17 @@ const es: Dictionary = {
   'account.terms.pending': 'Hay una versión más reciente en vigor — se te pedirá aceptarla.',
   'account.terms.never': 'Aún no has aceptado los Términos actuales.',
 
-  // Banner de cookies (LGPD) — se muestra solo cuando la publicidad está activa.
+  // Banner de consentimiento de cookies / scripts no esenciales (LGPD).
   'cookie.title': 'Cookies',
-  'cookie.message': 'Usamos una cookie necesaria para mantener tu sesión. Con tu consentimiento, los socios de publicidad también pueden usar cookies.',
+  'cookie.message': 'Usamos una cookie estrictamente necesaria para mantener tu sesión. Con tu consentimiento, también cargamos una analítica de uso respetuosa con la privacidad para mejorar CoinHub; nada no esencial se ejecuta hasta que aceptes.',
   'cookie.learnMore': 'Más información',
   'cookie.accept': 'Aceptar',
   'cookie.reject': 'Rechazar no esenciales',
+  'cookie.manage': 'Gestionar cookies',
 
   // Política de Privacidad (documento completo en #/privacy).
   'privacy.title': 'Política de Privacidad',
-  'privacy.effective': 'En vigor desde el 21 de junio de 2026.',
+  'privacy.effective': 'En vigor desde el 26 de junio de 2026.',
   'privacy.intro': 'Esta Política de Privacidad explica qué datos personales recopila CoinHub, por qué, cómo se protegen, con quién se comparten y qué derechos tienes bajo la LGPD de Brasil (Lei 13.709/2018). CoinHub es operado por Bobagi (Gustavo Perin).',
   'privacy.controllerTitle': '1. Quién controla tus datos',
   'privacy.controllerBody': 'El controlador de los datos es Bobagi (Gustavo Perin), operador de CoinHub en coin.bobagi.space. Para cualquier solicitud o consulta de privacidad, y para contactar al responsable de protección de datos, escribe a bobagi.contact@gmail.com.',
@@ -1404,7 +1407,7 @@ const es: Dictionary = {
   'privacy.securityTitle': '8. Cómo los protegemos',
   'privacy.securityBody': 'Las claves de Binance se cifran en reposo (AES-256-GCM). El acceso es por HTTPS; las sesiones se guardan solo como hashes; las acciones sensibles requieren reautenticación. Ningún sistema es perfectamente seguro, por lo que no podemos garantizar seguridad absoluta, pero aplicamos medidas técnicas y organizativas razonables.',
   'privacy.cookiesTitle': '9. Cookies',
-  'privacy.cookiesBody': 'CoinHub usa una única cookie estrictamente necesaria para mantener tu sesión; es requerida por el servicio y no se usa para rastreo. Si en el futuro se activa la publicidad, los socios de publicidad/analítica podrán definir cookies adicionales, y pediremos tu consentimiento mediante un banner de cookies antes de usarlas.',
+  'privacy.cookiesBody': 'CoinHub usa una única cookie estrictamente necesaria para mantener tu sesión; es requerida por el servicio y no se usa para rastreo. También usamos una herramienta de analítica autoalojada y respetuosa con la privacidad (Umami) para entender el uso del producto; es no esencial y solo se carga después de que aceptes en el banner de cookies — si rechazas o no haces nada, nunca se ejecuta. Puedes retirar o cambiar tu elección en cualquier momento desde "Gestionar cookies" en el pie de página. Si en el futuro se activa la publicidad, los socios de publicidad podrán definir cookies adicionales, también solo con tu consentimiento previo.',
   'privacy.rightsTitle': '10. Tus derechos',
   'privacy.rightsBody': 'Puedes confirmar si tratamos tus datos y acceder a ellos, corregirlos, solicitar su eliminación o portabilidad, preguntar sobre el intercambio y retirar tu consentimiento. Puedes hacer gran parte de esto en Configuración de la cuenta (incluida la eliminación definitiva de la cuenta), o contactarnos en la dirección anterior. También puedes reclamar ante la ANPD de Brasil.',
   'privacy.childrenTitle': '11. Menores de edad',

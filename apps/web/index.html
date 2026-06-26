@@ -7,8 +7,10 @@
     <meta name="theme-color" content="#fab005" />
     <meta name="description" content="Coin Hub — crypto trading automation on Binance and your B3 portfolio, in one place." />
     <title>CoinHub</title>
-    <!-- Umami analytics -->
-    <script defer src="https://analytics.bobagi.space/script.js" data-website-id="01c69fe8-2417-491a-b4a9-b9b368c6ad8d"></script>
+    <!-- Umami analytics is NOT loaded statically here on purpose: it is a non-essential script and
+         loads only AFTER the user opts in via the cookie banner. See apps/web/src/lib/analytics.ts
+         (injects the script when cookieConsent === 'accepted'). Loading it here would track every
+         visitor without consent (LGPD) and contradict our Privacy Policy. -->
   </head>
   <body>
     <div id="app"></div>
