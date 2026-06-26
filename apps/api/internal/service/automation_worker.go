@@ -445,8 +445,15 @@ func (worker *AutomationWorker) logSellExecution(applicationContext context.Cont
 	})
 }
 
+// dailyPurchaseCheckInterval is how often the daily-buy loop wakes to see whether a robot's scheduled
+// hour has arrived. It is the PRECISION of the daily buy: the buy fires on the first tick inside the
+// target hour, so a 5-minute interval meant buys landed up to ~5 min late (and scattered, since the
+// timer re-aligned on every restart). 30s caps that lateness at ≤30s. The buy is idempotent per day per
+// symbol (HasSuccessfulExecutionOfTypeSince), so waking often is safe — it buys once and then no-ops.
+const dailyPurchaseCheckInterval = 30 * time.Second
+
 func (worker *AutomationWorker) runDailyPurchaseLoop(applicationContext context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(dailyPurchaseCheckInterval)
 	defer ticker.Stop()
 	for {
 		select {

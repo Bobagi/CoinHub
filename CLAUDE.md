@@ -141,6 +141,15 @@ socket bug can only make reconciliation slower, never wrong.** New dep: `github.
 - Reviews: `code-review` (found + fixed a per-reconnect goroutine leak — conn-closer + keepalive were scoped to
   the stream, now scoped to the connection) and a security pass (no findings: sharded SQL is parameterized,
   proxy/listenKey not logged, WS hosts hardcoded by env).
+- **ACTUAL latency bug found + fixed (the operator's real complaint).** The operator reported daily buys firing
+  "up to 5 min late" — and that was NOT a worker-overload/parallelism problem at all. Root cause: the
+  **daily-purchase loop ticked every 5 minutes** and the schedule is hour-only (`daily_purchase_hour_utc`), so a
+  buy landed on the first 5-min tick inside the target hour (scattered, because the timer re-aligns on each
+  restart). DB evidence: robots set to hour 05:00 fired at 05:00:15 / 05:02:32 / 05:03:20 / 05:01:09… Fix:
+  `dailyPurchaseCheckInterval = 30s` (idempotent per day/symbol, so frequent checks are safe) → lateness now
+  ≤30s. **Sharding/proxy did nothing for this** (the bottleneck was the loop interval, not CPU/IP). Open
+  follow-up if the operator wants exact-time control: add **minute-level scheduling** (`daily_purchase_minute`
+  + UI minute picker) so a buy fires at a chosen HH:MM, not just the top of the hour.
 
 ## What this is
 
