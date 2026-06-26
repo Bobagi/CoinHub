@@ -108,6 +108,40 @@ nobody knew) with no user-facing signal when Binance rate-limited us. Built an e
   order-fill/ticker polling that can't be safely validated here against real Binance fills. Still backlog
   #2; do it as its own carefully-tested phase. The leader lock above is the prerequisite it needed.
 
+## 2026-06-26 session (WebSocket streams + worker parallelization)
+Built the two things deferred earlier: the WebSocket streams (backlog #2) and real worker parallelization.
+**Design rule throughout: WS is an ACCELERATOR; the 30s REST poller stays the correctness backstop, so a
+socket bug can only make reconciliation slower, never wrong.** New dep: `github.com/gorilla/websocket v1.5.3`.
+- **Market-price WS — LIVE (`binance_market_stream.go`).** Per-env combined `miniTicker` stream feeds the
+  **shared price cache** (`storeCachedPrice`), so stop-loss + the SPA read pushed prices instead of REST
+  ticker polling. Symbol-driven: the worker calls `marketStreams.Watch(restBaseURL, symbols)` for open
+  positions each tick; symbols age out after ~95s and the stream reconnects to the smaller set. Cache TTL
+  (5s) means a dropped stream falls straight back to REST. **Verified** end-to-end against Binance's public
+  prod WS (live BTCUSDT price landed in the cache in ~1.5s).
+- **User-data WS — BUILT but Binance DEPRECATED the mechanism (`binance_user_data_stream.go`).** The classic
+  `POST /api/v3/userDataStream` listenKey endpoint now returns **HTTP 410 Gone** (confirmed live on testnet for
+  real users). So the manager **self-disables process-wide on 410/404** (`markUnsupported`, logs once, cancels
+  all per-user streams) and the poller remains the sole reconciler — no log spam, no retry loop, nothing
+  broken. **Real-time order push now requires Binance's new WebSocket-API session (`session.logon` +
+  `userDataStream.subscribe`), which needs Ed25519 API keys** — a separate keys-overhaul project (users
+  currently provide HMAC keys). That's the true remaining work for push-based fills; the code + plumbing are
+  in place for when it's built. This is exactly why WS was flagged as its own phase, not a quick task.
+- **Worker parallelization — sharding (`WORKER_SHARD_COUNT`/`WORKER_SHARD_INDEX`).** `ListActiveUserIdentifiersForShard`
+  (`id % count == index`); each loop processes only its shard; the advisory-lock key is offset by the shard
+  index, so **one active worker PER shard, N in parallel**. Default count=1 ⇒ identical to before. Run N API
+  instances with indices 0..N-1 to parallelize. The user-data + market streams are driven from the monitor
+  loop, so sharding splits the WS connections across instances too.
+- **Per-instance egress proxy — `BINANCE_HTTP_PROXY`** (wired into `newBinanceHTTPClient` + the WS dialer).
+  THE enabler for parallelism: the Binance weight limit is **per IP**, so N parallel workers only help if they
+  egress from **different IPs** — give each shard its own proxy/IP. Never logged with credentials (host only).
+- **Scaling, honestly:** LB + N API replicas is safe (leader-lock-per-shard). But for the current handful of
+  users, parallel workers give **zero** benefit (the bottleneck is the per-IP Binance limit, and the market WS
+  + price cache already cut most ticker weight). Order of value: WS (done, market) > Ed25519 user-data WS >
+  multi-IP+sharding (mechanism now in place, only worth turning on at real volume).
+- Reviews: `code-review` (found + fixed a per-reconnect goroutine leak — conn-closer + keepalive were scoped to
+  the stream, now scoped to the connection) and a security pass (no findings: sharded SQL is parameterized,
+  proxy/listenKey not logged, WS hosts hardcoded by env).
+
 ## What this is
 
 **Coin Hub** is a multi-user personal investing app served at **https://coin.bobagi.space**. It
@@ -600,8 +634,11 @@ help text. **Be precise: say what we do AND what we don't.**
    `d891d08`); rotation still pending and history not purged. `CREDENTIALS_ENCRYPTION_KEY` must stay
    stable (rotating it makes stored Binance secrets undecryptable — plan a re-encrypt migration if ever
    rotated).
-2. **WebSocket user-data + market-price streams** — the real fix for the per-IP Binance rate limit
-   (replaces 30s `GetOrderStatus`/ticker polling). See the rate-limit section above.
+2. **WebSocket streams** — **market-price stream DONE** (live, feeds the price cache; see 2026-06-26
+   session). **User-data (order-fill) push: BLOCKED by Binance** — the classic listenKey endpoint is 410
+   Gone; the remaining work is the new **WebSocket-API session (`session.logon` + `userDataStream.subscribe`),
+   which requires Ed25519 keys** (users provide HMAC today → needs an Ed25519-key option). Until then the
+   30s poller reconciles fills (correct, just not instant). Plumbing/self-disable already in place.
 3. ~~**Leader lock** so the worker is safe to run on >1 replica~~ — **DONE 2026-06-25**
    (`service/leader_lock.go`, `pg_try_advisory_lock`). Remaining: optionally **user sharding** across
    worker instances + **multiple egress IPs / proxy sharding** (only when volume demands it).

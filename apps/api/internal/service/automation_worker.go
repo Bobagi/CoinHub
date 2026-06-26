@@ -13,6 +13,9 @@ import (
 
 type activeUserLister interface {
 	ListActiveUserIdentifiers(loadContext context.Context) ([]int64, error)
+	// ListActiveUserIdentifiersForShard returns only the users in this worker's shard (id % count ==
+	// index), so several worker instances can process disjoint slices of users in parallel.
+	ListActiveUserIdentifiersForShard(loadContext context.Context, shardCount int, shardIndex int) ([]int64, error)
 }
 
 type dailyPurchaseGuard interface {
@@ -50,7 +53,13 @@ type AutomationWorker struct {
 	leaderLock          leadershipAcquirer
 	alerter             workerStalledAlerter
 	instanceIdentifier  string
+	shardCount          int
+	shardIndex          int
 	monitorInterval     time.Duration
+	// WebSocket accelerators (best-effort; the REST poller above remains the correctness backstop):
+	// pushed market prices into the shared cache, and pushed order events that trigger an early reconcile.
+	marketStreams   *MarketStreamManager
+	userDataStreams *UserDataStreamManager
 }
 
 func NewAutomationWorker(
@@ -64,10 +73,18 @@ func NewAutomationWorker(
 	heartbeatRepository repository.WorkerHeartbeatRepository,
 	leaderLock leadershipAcquirer,
 	alerter workerStalledAlerter,
+	shardCount int,
+	shardIndex int,
 	monitorInterval time.Duration,
 ) *AutomationWorker {
 	if monitorInterval <= 0 {
 		monitorInterval = 30 * time.Second
+	}
+	if shardCount < 1 {
+		shardCount = 1
+	}
+	if shardIndex < 0 || shardIndex >= shardCount {
+		shardIndex = 0
 	}
 	hostname, _ := os.Hostname()
 	return &AutomationWorker{
@@ -82,6 +99,8 @@ func NewAutomationWorker(
 		leaderLock:          leaderLock,
 		alerter:             alerter,
 		instanceIdentifier:  hostname,
+		shardCount:          shardCount,
+		shardIndex:          shardIndex,
 		monitorInterval:     monitorInterval,
 	}
 }
@@ -89,8 +108,16 @@ func NewAutomationWorker(
 // Start launches the leadership manager. The trading loops only run on the replica that wins the
 // advisory lock; the rest stay passive (HTTP keeps serving) and periodically retry to take over.
 func (worker *AutomationWorker) Start(applicationContext context.Context) {
+	// WebSocket accelerators. They live for the process lifetime but only do work once the worker leads
+	// (Watch/EnsureUsers are only called from the leader's monitor loop), so non-leaders open no sockets.
+	worker.marketStreams = NewMarketStreamManager(applicationContext)
+	worker.userDataStreams = NewUserDataStreamManager(applicationContext, worker.credentialService, worker.monitorUser)
 	go worker.runLeadership(applicationContext)
-	log.Printf("Automation worker starting (monitor interval %s); awaiting leadership", worker.monitorInterval)
+	if worker.shardCount > 1 {
+		log.Printf("Automation worker starting (monitor interval %s, shard %d/%d); awaiting leadership", worker.monitorInterval, worker.shardIndex, worker.shardCount)
+	} else {
+		log.Printf("Automation worker starting (monitor interval %s); awaiting leadership", worker.monitorInterval)
+	}
 }
 
 // runLeadership keeps trying to become the single active worker. Once it leads, it starts the trading
@@ -196,10 +223,15 @@ func (worker *AutomationWorker) monitorAllUsers(applicationContext context.Conte
 	// completed tick proves the loop is running. A final stamp below marks a fully-processed tick.
 	worker.recordHeartbeatSafely(applicationContext)
 
-	userIdentifiers, listError := worker.userLister.ListActiveUserIdentifiers(applicationContext)
+	userIdentifiers, listError := worker.userLister.ListActiveUserIdentifiersForShard(applicationContext, worker.shardCount, worker.shardIndex)
 	if listError != nil {
 		log.Printf("automation: could not list active users: %v", listError)
 		return
+	}
+	// Keep a user-data WebSocket per active user (push order fills → early reconcile). Best-effort; the
+	// loop below still reconciles everyone regardless.
+	if worker.userDataStreams != nil {
+		worker.userDataStreams.EnsureUsers(userIdentifiers)
 	}
 	for _, userIdentifier := range userIdentifiers {
 		// Isolate each user: a panic while processing one user (e.g. an unexpected nil from Binance) is
@@ -236,6 +268,16 @@ func (worker *AutomationWorker) monitorUser(applicationContext context.Context, 
 	}
 	if len(openOperations) == 0 {
 		return
+	}
+
+	// Tell the market stream which coins to push live prices for (feeds the shared cache that resolvePrice
+	// reads). Best-effort; resolvePrice falls back to REST on a cache miss.
+	if worker.marketStreams != nil {
+		watchedSymbols := make([]string, 0, len(openOperations))
+		for _, operation := range openOperations {
+			watchedSymbols = append(watchedSymbols, operation.TradingPairSymbol)
+		}
+		worker.marketStreams.Watch(environmentConfiguration.RESTBaseURL, watchedSymbols)
 	}
 
 	// Stop-loss is configured per robot (one per coin). Map each coin to its robot's stop-loss so an
@@ -418,7 +460,7 @@ func (worker *AutomationWorker) runDailyPurchaseLoop(applicationContext context.
 }
 
 func (worker *AutomationWorker) processDailyPurchases(applicationContext context.Context) {
-	userIdentifiers, listError := worker.userLister.ListActiveUserIdentifiers(applicationContext)
+	userIdentifiers, listError := worker.userLister.ListActiveUserIdentifiersForShard(applicationContext, worker.shardCount, worker.shardIndex)
 	if listError != nil {
 		return
 	}

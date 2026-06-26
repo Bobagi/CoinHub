@@ -90,14 +90,20 @@ func main() {
 	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService)
 	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, agreementService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
 
-	// The worker runs as a guaranteed singleton via a Postgres advisory lock, so the stateless HTTP API
-	// can be scaled to several replicas without double-executing daily buys / stop-loss. It pages admins
-	// (OpsAlertService) when its heartbeat goes stale. The lock key is an arbitrary constant shared by
-	// every replica of THIS service ("coinhub1" in hex).
-	const automationWorkerLeaderLockKey int64 = 0x636F696E68756231
-	workerLeaderLock := service.NewLeaderLock(postgresConnector.Database, automationWorkerLeaderLockKey)
+	// The worker runs as a guaranteed singleton-per-shard via a Postgres advisory lock, so the stateless
+	// HTTP API can be scaled to several replicas without double-executing daily buys / stop-loss. It pages
+	// admins (OpsAlertService) when its heartbeat goes stale.
+	//
+	// PARALLELISM: set WORKER_SHARD_COUNT=N and run N instances with WORKER_SHARD_INDEX 0..N-1; each
+	// processes a disjoint slice of users (id % N == index) in parallel. The advisory-lock key is offset
+	// by the shard index, so each shard has its own lock (one active worker PER shard, N in parallel).
+	// Pair distinct shards with distinct BINANCE_HTTP_PROXY egress IPs — the Binance weight limit is
+	// per-IP, so parallel workers only help when they leave from different IPs. Default count=1 = today.
+	const automationWorkerLeaderLockKey int64 = 0x636F696E68756231 // "coinhub1"
+	workerShardCount, workerShardIndex := workerShardFromEnv()
+	workerLeaderLock := service.NewLeaderLock(postgresConnector.Database, automationWorkerLeaderLockKey+int64(workerShardIndex))
 	opsAlertService := service.NewOpsAlertService(userRepository, emailSender, environmentValueOrDefault("APP_BASE_URL", "https://coin.bobagi.space"))
-	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, workerHeartbeatRepository, workerLeaderLock, opsAlertService, 30*time.Second)
+	automationWorker := service.NewAutomationWorker(userRepository, userCredentialService, tradingRobotRepository, tradingOperationRepository, tradingOperationExecutionRepository, tradingOperationExecutionRepository, userTradingService, workerHeartbeatRepository, workerLeaderLock, opsAlertService, workerShardCount, workerShardIndex, 30*time.Second)
 
 	// Operational status (worker liveness + Binance rate-limit gate) for the header indicator + probes.
 	operationalStatusService := service.NewOperationalStatusService(workerHeartbeatRepository)
@@ -169,6 +175,25 @@ func sessionLifetimeFromEnv(fallback time.Duration) time.Duration {
 		return fallback
 	}
 	return time.Duration(hours) * time.Hour
+}
+
+// workerShardFromEnv reads WORKER_SHARD_COUNT (how many parallel worker instances exist) and
+// WORKER_SHARD_INDEX (this instance's 0-based slice). Defaults to a single shard (1, 0) = one worker
+// processing all users, unchanged from before. Invalid values fall back to the safe single-shard default.
+func workerShardFromEnv() (int, int) {
+	shardCount := 1
+	if raw := os.Getenv("WORKER_SHARD_COUNT"); raw != "" {
+		if parsed, parseError := strconv.Atoi(raw); parseError == nil && parsed >= 1 {
+			shardCount = parsed
+		}
+	}
+	shardIndex := 0
+	if raw := os.Getenv("WORKER_SHARD_INDEX"); raw != "" {
+		if parsed, parseError := strconv.Atoi(raw); parseError == nil && parsed >= 0 && parsed < shardCount {
+			shardIndex = parsed
+		}
+	}
+	return shardCount, shardIndex
 }
 
 // maxQuoteAmountPerOrderFromEnv reads MAX_ORDER_QUOTE_AMOUNT (the per-order spending ceiling), falling

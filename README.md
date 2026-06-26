@@ -122,11 +122,15 @@ daily-purchase loop that runs each robot's DCA buy once a day. Without it, robot
   automation is paused, with the reason on hover plus a banner; a manual buy/sell during a Binance
   cooldown **fails fast** with a clear `binance_busy` message instead of hanging. The Terms disclose that
   automated operation may pause and resumes automatically once the condition clears.
-- **Singleton worker + scaling.** The worker runs **only on the replica that holds a Postgres advisory
-  lock** (`LeaderLock`), so the stateless HTTP API can be scaled behind a load balancer **without** every
-  replica double-executing daily buys/stop-loss. A load balancer alone does *not* parallelize the worker
-  — it would multiply it; the right path is the leader-lock singleton now, and user **sharding** later
-  (today's bottleneck is the per-IP Binance request-weight limit, not CPU).
+- **Singleton worker, scaling & parallelism.** The worker runs **only on the replica holding a Postgres
+  advisory lock** (`LeaderLock`), so the stateless HTTP API scales behind a load balancer **without** every
+  replica double-executing daily buys/stop-loss. To actually run workers **in parallel**, set
+  `WORKER_SHARD_COUNT=N` and deploy N instances with `WORKER_SHARD_INDEX` 0..N-1 — each processes a disjoint
+  slice of users (`id % N == index`) under its own per-shard lock. Because the Binance weight limit is
+  **per IP**, parallel workers only help when they egress from **different IPs**: give each shard its own
+  `BINANCE_HTTP_PROXY`. Default `WORKER_SHARD_COUNT=1` = one worker, unchanged. (At the current handful of
+  users this gives no benefit — the bottleneck is the per-IP limit, which the market-price WebSocket + price
+  cache already relieve — so the mechanism exists but is meant for real volume.)
 
 ## Local development
 
@@ -153,8 +157,10 @@ history), pagination, toasts and trilingual i18n; the B3/Investidor10 portfolio 
 ### To do / to fix (engineering — see `CLAUDE.md` "TODO / backlog" for the full list)
 - **Secret rotation + git-history purge** — Binance/DB/email creds were committed in history; rotation
   still pending (do **not** rotate `CREDENTIALS_ENCRYPTION_KEY` without a re-encrypt migration).
-- **WebSocket user-data + market-price streams** — replace the 30s REST polling; the real fix for the
-  per-IP Binance rate limit as the user base grows. (Planned as its own carefully-tested phase.)
+- **WebSocket streams** — **market-price stream is live** (pushes prices into the shared cache; REST is the
+  fallback). **User-data (order-fill) push is blocked by Binance**: the classic listenKey endpoint is retired
+  (HTTP 410), so real-time fills now require Binance's new WebSocket-API session, which needs **Ed25519 keys**
+  (the app uses HMAC keys today) — a follow-up. Meanwhile the 30s poller reconciles fills correctly.
 - ~~**Leader lock** before running >1 API replica~~ — **done**: the worker is now a singleton via a
   Postgres advisory lock (`LeaderLock`), so the API is safe to scale. Next, only when volume needs it:
   shard users across worker instances.

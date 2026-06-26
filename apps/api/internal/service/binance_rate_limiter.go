@@ -3,10 +3,36 @@ package service
 import (
 	"log"
 	"net/http"
+	"net/url"
+	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
+
+// binanceBaseRoundTripper is the transport every Binance HTTP client builds on. When BINANCE_HTTP_PROXY
+// is set it routes Binance traffic through that proxy, so a worker instance can egress from a DIFFERENT
+// public IP than its peers — the only way sharded parallel workers actually beat the per-IP weight
+// limit (the limit is per IP, not per process). Computed once at startup.
+var binanceBaseRoundTripper = buildBinanceBaseTransport()
+
+func buildBinanceBaseTransport() http.RoundTripper {
+	proxyValue := strings.TrimSpace(os.Getenv("BINANCE_HTTP_PROXY"))
+	if proxyValue == "" {
+		return http.DefaultTransport
+	}
+	parsedProxy, parseError := url.Parse(proxyValue)
+	if parseError != nil || parsedProxy.Host == "" {
+		// Never log the raw value — a proxy URL can embed credentials.
+		log.Printf("binance: BINANCE_HTTP_PROXY is set but not a valid URL — using a direct connection")
+		return http.DefaultTransport
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(parsedProxy)
+	log.Printf("binance: routing Binance traffic through the configured egress proxy (%s)", parsedProxy.Hostname())
+	return transport
+}
 
 // Binance enforces request limits PER IP, not per API key. Every user's traffic leaves this VPS from
 // the same IP, so the IP weight ceiling is the first wall we hit as the user base grows. This file
@@ -155,6 +181,6 @@ func (transport *rateLimitedBinanceTransport) RoundTrip(request *http.Request) (
 func newBinanceHTTPClient(timeout time.Duration) *http.Client {
 	return &http.Client{
 		Timeout:   timeout,
-		Transport: &rateLimitedBinanceTransport{base: http.DefaultTransport, gate: sharedBinanceRateGate},
+		Transport: &rateLimitedBinanceTransport{base: binanceBaseRoundTripper, gate: sharedBinanceRateGate},
 	}
 }

@@ -5,6 +5,7 @@ go 1.22
 require github.com/lib/pq v1.10.9
 
 require (
+	github.com/gorilla/websocket v1.5.3
 	github.com/oschwald/geoip2-golang v1.9.0
 	golang.org/x/crypto v0.31.0
 )
