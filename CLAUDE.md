@@ -289,6 +289,13 @@ cd apps/web && pnpm build                        # rebuild the SPA nginx serves
   user set `live_trading_enabled`. Recommend trade-only Binance keys (no withdrawal).
 - i18n: `apps/web/src/lib/i18n.ts` (dictionaries en/pt/es + `t` store + auto-detect). Add UI strings
   there, not inline.
+- **Consent-gated scripts (LGPD):** load non-essential scripts (analytics/ads) ONLY after
+  `cookieConsent==='accepted'` — inject at runtime via `apps/web/src/lib/analytics.ts`, NEVER a static
+  `<script>` in `index.html`. Only the session cookie is essential (no consent). `consentRequired`
+  (`stores.ts`) drives the banner; bump `domain.CurrentAgreementVersion` when the privacy text changes.
+- **Leader-gated maintenance loops:** periodic cross-user jobs (e.g. the access-log retention purge) go
+  in a loop started from `AutomationWorker.runLeadership` (mirror `runRetentionLoop`/`runWatchdogLoop`),
+  so only the advisory-lock holder runs them — never in a request handler or an always-on goroutine.
 
 ## Status (2026-06)
 Done & live: monorepo unification; multi-user auth (email + **Google OAuth**, migration 0009 makes
