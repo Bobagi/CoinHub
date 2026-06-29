@@ -35,6 +35,74 @@ truth so you don't have to re-derive the project each session.
 > (O 3º gap pré-lançamento da análise de mercado — **monitoramento do worker** — JÁ está feito:
 > operational-status + heartbeat + watchdog + leader lock, sessão 2026-06-25.)
 
+## ✅ RESOLVIDO 2026-06-29 — crash-loop do `coin-hub-api` (panic no market WebSocket)
+**Fix commitado em `main` + deployado + verificado** (api `Up`, `RestartCount=0`, 0 panics passando do
+ponto exato do crash, `dockerd` de ~143% → ~7% de CPU). Detalhe abaixo; o histórico do diagnóstico de
+2026-06-28 segue preservado para contexto.
+
+**Causa raiz REAL (a hipótese de "imagem velha" abaixo estava ERRADA — os números de linha do panic
+batiam com o source ATUAL):** o `binanceMarketStream.readUntilSetChanges` usava `SetReadDeadline` como
+"acordador" periódico e, no timeout, fazia `continue` para re-checar o conjunto de símbolos. Mas o
+**gorilla/websocket LATCHA o erro de leitura permanentemente** — depois que `ReadMessage` retorna QUALQUER
+erro, inclusive um timeout de read-deadline, o `readErr` da conexão fica setado e toda chamada seguinte
+retorna na hora. O `continue` então gira em loop apertado e o gorilla **dá panic em 1000 leituras**
+(`"repeated read on failed websocket connection"`, proteção contra tight-loop). Disparava sempre que o
+read-deadline (35s) estourava numa conexão silenciosa/half-open. Rebuild sozinho NÃO resolvia (o
+container já tinha sido recriado com o source atual e mesmo assim somou 101 panics).
+
+**Correção (`apps/api/internal/service/binance_market_stream.go`):** reescrevi `readUntilSetChanges` no
+padrão **comprovado do `binance_user_data_stream.go`** — uma **goroutine leitora** que faz `return` no
+PRIMEIRO erro de read e **nunca re-lê** uma conexão já falha, + um **loop de controle** (ticker de 10s)
+que dá `Close` na conexão para reconectar quando o conjunto de símbolos muda ou o contexto cancela. O
+read-deadline virou **guarda de liveness de 6 min** (> ping de ~3 min da Binance), renovado a cada
+frame/ping (com `SetPingHandler` que renova o deadline e responde pong). Removido o import `net` (não
+mais usado). `go build`/`go vet` limpos.
+
+**Lição durável (já não há outro caso no repo — só o market stream tinha o antipadrão):** com
+gorilla/websocket, **nunca chame `ReadMessage` de novo depois que ela retornou erro** (timeout incluso);
+o erro é permanente. Para "acordar" e re-checar estado sem matar a leitura, use uma goroutine leitora +
+loop de controle que dá `Close` na conexão — não `SetReadDeadline` + `continue`.
+
+---
+### Diagnóstico original (2026-06-28, contexto histórico)
+Diagnosticando um pico de CPU no host (VPS estava ~95%, em parte **steal** da Hostinger, em parte
+trabalho real) descobri que **o container `coin-hub-api-1` está em crash-loop**: `RestartCount=100`
+no dia, reiniciando a cada ~5 min com `restartPolicy=always`, `exitCode=2`. Cada reinício faz o
+`dockerd`/`containerd` recriar rede/namespaces → flagrei o **`dockerd` a ~143% de CPU** (de 200%
+em 2 núcleos) enquanto **todos os containers somados usavam só ~5%**. Ou seja: o churn do restart,
+não o app em si, é que pesava.
+
+**Stack do panic (logs do container):**
+```
+user-data stream (user N): could not create listenKey: Post ".../api/v3/userDataStream": context canceled
+panic: repeated read on failed websocket connection
+  github.com/gorilla/websocket.(*Conn).NextReader / ReadMessage
+  service.(*binanceMarketStream).readUntilSetChanges  /app/internal/service/binance_market_stream.go:161
+  service.(*binanceMarketStream).run                  .../binance_market_stream.go:135
+  created by service.(*MarketStreamManager).Watch (goroutine 32)
+```
+Contexto: a **Binance descontinuou o endpoint `listenKey`/userDataStream** (o próprio log diz
+"listenKey endpoint is gone (deprecated) — disabling real-time order push; the 30s poller remains
+the reconciler"). O poller de 30s cobre a reconciliação, então a falha do WS **deveria** ser
+graciosa — mas o processo inteiro morre no `panic` do gorilla `repeated read on failed websocket
+connection` (chamar `ReadMessage` de novo numa conexão que já falhou).
+
+**Pista (⚠ REFUTADA — ver "Causa raiz REAL" no topo da seção):** chegou-se a achar que a imagem em
+prod estava DESATUALIZADA e que o source atual "já tratava o erro". Falso: o `continue` no timeout
+re-lia uma conexão já latcheada como falha → panic. O `return` em `readError != nil` só cobria o
+caminho de erro NÃO-timeout; o timeout caía no `continue` e girava até 1000 → panic.
+
+**Paliativo se voltar a apertar a CPU do host antes do fix:** parar o churn com
+`docker update --restart=no coin-hub-api-1 && docker stop coin-hub-api-1` (deixa de reiniciar; o
+resto do Coin Hub e do VPS seguem). Não foi feito nada ainda — o operador pediu só para registrar
+para tratar depois.
+
+**Sinal extra de container velho — label aponta para pasta que não existe mais:** o container em
+execução foi criado quando a pasta se chamava `/opt/Coin-Alert` e nunca foi recriado; o
+`docker inspect coin-hub-api-1` ainda devolve `com.docker.compose.project.working_dir=/opt/Coin-Alert`,
+mas a pasta real hoje é **`/opt/CoinHub`** (renomeada). Isso é inofensivo, mas confirma que a stack
+não é recriada há tempos → o `up -d --build` do fix acima também sincroniza esse metadado.
+
 ## Security audit 2026-06-25 (backend, via `security-guidance` plugin)
 Full pass over `apps/api` (Go), focused on the four areas the operator named: Binance-key handling,
 auth/sessions, per-user scoping, and the avatar SSRF proxy. **Verdict: backend is in good shape** — one

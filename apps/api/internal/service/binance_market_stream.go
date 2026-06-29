@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -29,8 +28,8 @@ import (
 
 const (
 	marketSymbolStaleAfter   = 95 * time.Second // drop a symbol not re-watched within ~3 monitor ticks
-	marketStreamCheckEvery   = 10 * time.Second // how often to reconcile the desired symbol set
-	marketStreamReadTimeout  = 35 * time.Second // wake ReadMessage periodically to re-check the set
+	marketStreamCheckEvery   = 10 * time.Second // how often the control loop reconciles the desired symbol set
+	marketStreamReadTimeout  = 6 * time.Minute  // liveness guard, refreshed on any frame/ping (> Binance's ~3-min server ping)
 	marketStreamReconnectMin = 2 * time.Second
 	marketStreamReconnectMax = 60 * time.Second
 )
@@ -150,22 +149,59 @@ func (stream *binanceMarketStream) dial(runContext context.Context, symbols []st
 }
 
 // readUntilSetChanges reads mini-ticker frames into the cache, returning when the desired symbol set
-// changes (so run reconnects) or the connection errors.
+// changes (so run reconnects), the connection errors, or the context is cancelled.
+//
+// gorilla/websocket latches read errors PERMANENTLY: once ReadMessage returns an error — INCLUDING a
+// SetReadDeadline timeout — the connection's readErr is set, so every subsequent ReadMessage returns
+// instantly and a re-read loop spins and PANICS ("repeated read on failed websocket connection") after
+// 1000 reads. (That panic is exactly what was crash-looping the API in prod.) So the reader goroutine
+// below must EXIT on the first read error and never re-read; the control loop closes the connection to
+// unblock the reader when it wants to reconnect (symbol-set change or shutdown). This mirrors the proven
+// pattern in binance_user_data_stream.go.
 func (stream *binanceMarketStream) readUntilSetChanges(runContext context.Context, connection *websocket.Conn, connectedSymbols []string) {
 	connectedKey := strings.Join(connectedSymbols, ",")
-	for runContext.Err() == nil {
-		if strings.Join(stream.desiredSymbols(), ",") != connectedKey {
-			return // the set changed — reconnect to the new set
-		}
+
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		// Liveness deadline, refreshed on every frame/ping; a genuinely dead (half-open) socket trips it
+		// and we reconnect, while a quiet symbol stays up (Binance pings ~every 3 min; gorilla auto-pongs).
 		_ = connection.SetReadDeadline(time.Now().Add(marketStreamReadTimeout))
-		_, payload, readError := connection.ReadMessage()
-		if readError != nil {
-			if netError, ok := readError.(net.Error); ok && netError.Timeout() {
-				continue // periodic wake to re-check the set; not a real error
+		connection.SetPingHandler(func(appData string) error {
+			_ = connection.SetReadDeadline(time.Now().Add(marketStreamReadTimeout))
+			writeError := connection.WriteControl(websocket.PongMessage, []byte(appData), time.Now().Add(10*time.Second))
+			if writeError == websocket.ErrCloseSent {
+				return nil
 			}
-			return // genuine disconnect — reconnect
+			return writeError
+		})
+		for {
+			_, payload, readError := connection.ReadMessage()
+			if readError != nil {
+				return // disconnect OR liveness timeout — reconnect; never re-read a latched-failed conn
+			}
+			_ = connection.SetReadDeadline(time.Now().Add(marketStreamReadTimeout))
+			stream.handleMessage(payload)
 		}
-		stream.handleMessage(payload)
+	}()
+
+	ticker := time.NewTicker(marketStreamCheckEvery)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-readerDone:
+			return // connection errored/closed — run() reconnects
+		case <-runContext.Done():
+			_ = connection.Close() // unblock the blocked ReadMessage
+			<-readerDone
+			return
+		case <-ticker.C:
+			if strings.Join(stream.desiredSymbols(), ",") != connectedKey {
+				_ = connection.Close() // unblock the reader, then reconnect to the new symbol set
+				<-readerDone
+				return
+			}
+		}
 	}
 }
 
