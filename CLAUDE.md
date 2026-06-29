@@ -58,6 +58,14 @@ read-deadline virou **guarda de liveness de 6 min** (> ping de ~3 min da Binance
 frame/ping (com `SetPingHandler` que renova o deadline e responde pong). Removido o import `net` (não
 mais usado). `go build`/`go vet` limpos.
 
+**Auditoria de impacto (2026-06-29, no DB):** o crash-loop NÃO causou compra/venda perdida ou falha.
+Compra diária (DCA) saiu 2×/dia todos os dias 20→28/06 com **0 falhas** (`success=false` vazio em 12d);
+durante o crash-loop as compras de 27 e 28/06 caíram às 05:00:29/05:00:30 UTC (≤30s da hora-alvo). Por
+quê: worker rodava ~30–65s por ciclo de restart, DCA é idempotente por dia/símbolo + checada a cada 30s,
+o poller REST de 30s é o backstop, e os take-profits são ordens-limite em repouso NA Binance (executam
+sem o app). Stop-loss (único sell app-side) estava **desativado em todos os robôs ativos**. Único custo
+real: CPU do host + blips de indisponibilidade da API nos restarts.
+
 **Lição durável (já não há outro caso no repo — só o market stream tinha o antipadrão):** com
 gorilla/websocket, **nunca chame `ReadMessage` de novo depois que ela retornou erro** (timeout incluso);
 o erro é permanente. Para "acordar" e re-checar estado sem matar a leitura, use uma goroutine leitora +
