@@ -28,12 +28,59 @@ truth so you don't have to re-derive the project each session.
 > **PRÓXIMOS ITENS REAIS (maiores gaps pré-lançamento, NÃO feitos — verificados nesta sessão):**
 > 1. **Backup do Postgres** — NÃO existe (sem `pg_dump`/cron no repo nem no host). Perder o volume
 >    `coin-hub_db_data` = perder chaves Binance criptografadas + histórico. **Gap #1 antes de lançar.**
-> 2. **Testes no core de ordens** — só há `portfolio_handler_test.go`; o caminho do dinheiro
->    (`UserTradingService`/`AutomationWorker`) tem **zero** testes.
+> 2. **Testes no core de ordens** — só há `portfolio_handler_test.go` + `binance_conversion_service_test.go`
+>    (2026-07-02); o caminho do dinheiro (`UserTradingService`/`AutomationWorker`) segue com **zero** testes.
 > 3. Backlog: user-data WS push precisa de chaves **Ed25519** (#2), rotação de segredos + purge do git
 >    (#1), 2FA TOTP (#4). Ver TODO/backlog.
 > (O 3º gap pré-lançamento da análise de mercado — **monitoramento do worker** — JÁ está feito:
 > operational-status + heartbeat + watchdog + leader lock, sessão 2026-06-25.)
+
+## 2026-07-02 session (moeda em TODO valor + saldo disponível + multi-moeda com moeda de exibição)
+O operador apontou 3 problemas pré-lançamento: (1) os cards da Rentabilidade (Custo/Recebido/Resultado)
+mostravam números sem moeda nem formatação ("5.544845" em vez de "R$ 5.544,85"); (2) faltava mostrar o
+saldo Binance disponível da moeda de compra; (3) nada impede um usuário de operar pares BRL + USDT +
+BTC misturados — e os totais antigos **somavam moedas diferentes como se fossem uma** (bug real,
+confirmado no código). Pesquisa (CoinGecko/Kubera/Portfolio Performance): o padrão da indústria é uma
+**moeda de exibição única** escolhida pelo usuário, com todas as posições convertidas a preço de
+mercado. Implementado end-to-end:
+- **Backend novo:** `GET /api/v1/binance/balances` (conta spot assinada, `omitZeroBalances`, **cache
+  15s por user+env** invalidado em `UserTradingService.logExecution` após ordem com sucesso —
+  `InvalidateCachedSpotBalances`) e `GET /api/v1/binance/rate?from=&to=` (par direto → inverso →
+  ponte USDT/BTC/BNB, **em cima do price cache de 5s** — custo ~zero de weight; sem cotação → 404
+  `rate_unavailable`; preço 0 = fail-closed). Lógica pura `resolveConversionRate` com **8 testes
+  unitários** (`binance_conversion_service_test.go`). `/binance/symbols` agora devolve
+  `{symbol, base, quote}` e o exchangeInfo ganhou **cache compartilhado de 10min por env** (antes era
+  por instância = inútil, weight-20 a cada request). Sem migração de DB; worker intocado; escala
+  preservada (tudo cacheado/compartilhado).
+- **Frontend `lib/money.ts` (fonte única):** `formatMoney` (fiat via `Intl` → "R$ 5.544,85";
+  stablecoin/cripto → "30.00 USDT"/"0.0042 BTC" — **USDT deixou de aparecer como "US$"**, era
+  impreciso), `splitSymbol`, `quoteAssetFor`, `convertAmount` (regra convert-or-fallback única),
+  `formatConvertedTotal` (partes sem cotação são **anexadas separadas**, nunca somadas — nada de
+  misturar unidades), `hasUnconvertedParts` (segura a cor de lucro/prejuízo se a soma não for 100%
+  convertida). As 3 cópias antigas de formatMoney/splitSymbol nos painéis foram removidas.
+- **Moeda de exibição:** seletor na barra da seção "Posições & desempenho" (persistido em
+  localStorage `coinhub_display_currency`, store `displayCurrency`; auto = moeda com mais capital
+  investido, fallback BRL/pt · USDT/outros). Converte: cards da Rentabilidade (+ split você/robôs),
+  donut/total/pills da Alocação (percentuais agora comparáveis entre moedas), header "se vender tudo
+  agora". Valores POR LINHA (posições, histórico, preços) ficam **na moeda do par** com símbolo
+  correto; gráficos continuam na moeda do par. Rates re-buscadas a cada 30s (junto com preços),
+  com guarda de corrida por sequência; **timer pula ticks com aba oculta** (economiza o weight-20
+  do saldo). i18n `display.*`/`buy.available`/`buy.amountIn`/`err.rate_unavailable` (en/pt/es);
+  `prof.help`/`alloc.walletTotalHelp` atualizados p/ mencionar a conversão.
+- **Saldo disponível:** linha "Disponível na sua conta Binance: R$ X" no card Comprar e no editor de
+  robô (moeda de cotação do par), + chips "Disponível para comprar" na barra da seção de desempenho
+  (uma por moeda de cotação usada). Labels Capital/Máx. investido ganham "(BRL)"; qty ganha o código
+  da moeda base; chips "Moedas adquiridas" mostram base (antes mostravam o PAR: "0.0012 BTCBRL").
+- **Reviews:** `/code-review` medium (8 ângulos, 4 agents) → 8 achados, **todos corrigidos** no mesmo
+  diff (destaques: fallback que somava moedas misturadas nos painéis; `rate:0` retornado como 200;
+  corrida no loadRates; poll de saldo com aba oculta). `svelte-check` **0 erros** (consertado também
+  o único erro pré-existente). Verificado live com conta descartável (depois deletada): symbols
+  (objetos), balances `connected:false` sem chave, rate BTC→USDT ok, **BRL→USDT funciona até no
+  testnet** (USDTBRL existe lá), 400 p/ asset inválido, 401 sem sessão; USDTBRL/ETHBRL confirmados
+  em produção via API pública.
+- **Aberto (follow-up, não feito):** histórico de preço do gráfico não converte (padrão da indústria
+  — série fica na moeda do par); percentuais do donut são best-effort se faltar cotação; B3/scraper
+  fora do escopo (valores já vêm em BRL do Investidor10).
 
 ## ✅ RESOLVIDO 2026-06-29 — crash-loop do `coin-hub-api` (panic no market WebSocket)
 **Fix commitado em `main` + deployado + verificado** (api `Up`, `RestartCount=0`, 0 panics passando do
@@ -378,6 +425,13 @@ cd apps/web && pnpm build                        # rebuild the SPA nginx serves
 - **Leader-gated maintenance loops:** periodic cross-user jobs (e.g. the access-log retention purge) go
   in a loop started from `AutomationWorker.runLeadership` (mirror `runRetentionLoop`/`runWatchdogLoop`),
   so only the advisory-lock holder runs them — never in a request handler or an always-on goroutine.
+- **Money display (2026-07-02):** every money amount in the UI goes through `apps/web/src/lib/money.ts`
+  — `formatMoney(value, asset, locale)` for per-row amounts (in the PAIR's quote currency: R$ for BRL,
+  code suffix for USDT/BTC — never bare numbers, never "US$" for USDT), and `formatConvertedTotal`
+  for AGGREGATES (converted into the user's display currency via `/api/v1/binance/rate`; parts with no
+  rate are appended separately — **never sum amounts in different currencies into one number**).
+  Resolve a pair's quote with `quoteAssetFor(symbol, quoteBySymbol)` (exchange map + suffix fallback),
+  not ad-hoc suffix matching.
 
 ## Status (2026-06)
 Done & live: monorepo unification; multi-user auth (email + **Google OAuth**, migration 0009 makes

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import { api, type TradingSettings, type CredentialStatus, type Operation, type Execution, type Robot } from './api'
-  import { binanceStatus, currentUser, pushToast, notifyError } from './stores'
+  import { api, type TradingSettings, type CredentialStatus, type Operation, type Execution, type Robot, type SymbolInfo, type SpotBalance } from './api'
+  import { binanceStatus, currentUser, pushToast, notifyError, displayCurrency, setDisplayCurrency } from './stores'
   import { t, intlLocale, formatDateTime, formatDate, translateError } from './i18n'
+  import { splitSymbol, formatMoney, formatConvertedTotal, convertedTotalValue, subtractAmounts, quoteAssetFor, hasUnconvertedParts, type AmountsByCurrency } from './money'
   import AllocationPanel from './AllocationPanel.svelte'
   import ProfitabilityPanel from './ProfitabilityPanel.svelte'
   import PortfolioPanel from './PortfolioPanel.svelte'
@@ -17,22 +18,31 @@
   let allocView: 'allocation' | 'profit' = 'allocation'
   const environments = ['TESTNET', 'PRODUCTION']
 
-  // Common quote assets (the coin you pay WITH), longest first so e.g. FDUSD wins over USD.
-  const knownQuoteAssets = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'TUSD', 'DAI', 'BRL', 'EUR', 'GBP', 'AUD', 'TRY', 'BTC', 'ETH', 'BNB']
-  function quoteAssetOf(symbol: string): string {
-    const upper = (symbol || '').toUpperCase()
-    for (const quote of knownQuoteAssets) {
-      if (upper.length > quote.length && upper.endsWith(quote)) return quote
-    }
-    return ''
-  }
+  // symbol → base/quote maps built from the exchange info (/binance/symbols); splitSymbol's suffix
+  // guess is only the fallback for pairs the active environment no longer lists.
+  let quoteBySymbol: Record<string, string> = {}
+  let baseBySymbol: Record<string, string> = {}
+  // Reactive arrows (not plain functions) so template expressions using them re-evaluate when the
+  // async-loaded maps or the locale change.
+  $: quoteOf = (symbol: string) => quoteAssetFor(symbol, quoteBySymbol)
+  $: baseOf = (symbol: string) => baseBySymbol[(symbol || '').toUpperCase()] || splitSymbol(symbol).base
+  // money(v, symbol) formats v in the PAIR'S quote currency — for per-row amounts, which stay in the
+  // currency they actually happened in (only aggregates get converted to the display currency).
+  $: money = (value: number, symbol: string) => formatMoney(value, quoteOf(symbol), $intlLocale)
 
   let settings: TradingSettings | null = null
   let credentials: CredentialStatus | null = null
   let operations: Operation[] = []
   let executions: Execution[] = []
-  let symbols: string[] = []
+  let symbolInfos: SymbolInfo[] = []
+  $: symbols = symbolInfos.map((info) => info.symbol) // just the names, for the autocompletes
   let loadingError = ''
+
+  // Spot-wallet balances (free = spendable) for the active environment, keyed by asset. Drives the
+  // "available to buy" hints; connected=false (no keys yet) simply hides them.
+  let spotBalances: Record<string, SpotBalance> = {}
+  let balancesConnected = false
+  $: freeOf = (asset: string) => spotBalances[asset]?.free ?? 0
 
   // credEnv is the environment currently selected in the connection tab (which the key form targets).
   let credEnv = 'TESTNET'
@@ -126,22 +136,90 @@
   $: canCreateRobot = robotLimit === 0 || robots.length < robotLimit
   $: robotProductionNeedsLive = credentials?.active_environment === 'PRODUCTION' && !!settings && !settings.live_trading_enabled
 
-  // Profitability (for the active environment). Costs/proceeds come from the operations table (the
-  // source of truth); the site-vs-robots split comes from executions (initiated_by). Buys = money in;
-  // completed sales (SELL) = money back; SELL_ORDER_PLACED records are just placed orders, not sales.
-  $: investedTotal = operations.reduce((sum, op) => sum + op.quantity * op.purchase_price_per_unit, 0)
-  $: openCostTotal = operations
-    .filter((op) => op.status === 'OPEN')
-    .reduce((sum, op) => sum + op.quantity * op.purchase_price_per_unit, 0)
+  // Profitability (for the active environment), grouped by QUOTE currency — users can trade BRL-,
+  // USDT- and BTC-quoted pairs side by side, and summing those raw numbers would mix units. The
+  // per-currency totals are converted to the display currency at render time (formatConvertedTotal).
+  // Costs/proceeds come from the operations table (the source of truth); the site-vs-robots split
+  // comes from executions (initiated_by). Buys = money in; completed sales (SELL) = money back;
+  // SELL_ORDER_PLACED records are just placed orders, not sales.
+  function sumByQuote<T>(items: T[], quotes: Record<string, string>, symbolOf: (item: T) => string, valueOf: (item: T) => number): AmountsByCurrency {
+    const totals: AmountsByCurrency = {}
+    for (const item of items) {
+      const quote = quoteAssetFor(symbolOf(item), quotes)
+      totals[quote] = (totals[quote] || 0) + valueOf(item)
+    }
+    return totals
+  }
+  $: investedByQuote = sumByQuote(operations, quoteBySymbol, (op) => op.symbol, (op) => op.quantity * op.purchase_price_per_unit)
+  $: openCostByQuote = sumByQuote(operations.filter((op) => op.status === 'OPEN'), quoteBySymbol, (op) => op.symbol, (op) => op.quantity * op.purchase_price_per_unit)
   $: soldOperations = operations.filter((op) => op.status === 'SOLD' && op.sell_price_per_unit != null)
-  $: realizedProceeds = soldOperations.reduce((sum, op) => sum + op.quantity * (op.sell_price_per_unit as number), 0)
-  $: realizedCost = soldOperations.reduce((sum, op) => sum + op.quantity * op.purchase_price_per_unit, 0)
-  $: realizedResult = realizedProceeds - realizedCost
-  $: spentBySite = executions.filter((e) => e.success && e.operation_type === 'BUY' && e.initiated_by === 'USER').reduce((s, e) => s + e.total_value, 0)
-  $: spentByRobots = executions.filter((e) => e.success && (e.operation_type === 'DAILY_BUY' || e.operation_type === 'BUY') && e.initiated_by === 'BOT').reduce((s, e) => s + e.total_value, 0)
-  $: earnedBySite = executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'USER').reduce((s, e) => s + e.total_value, 0)
-  $: earnedByRobots = executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'BOT').reduce((s, e) => s + e.total_value, 0)
+  $: receivedByQuote = sumByQuote(soldOperations, quoteBySymbol, (op) => op.symbol, (op) => op.quantity * (op.sell_price_per_unit as number))
+  $: realizedByQuote = subtractAmounts(receivedByQuote, sumByQuote(soldOperations, quoteBySymbol, (op) => op.symbol, (op) => op.quantity * op.purchase_price_per_unit))
+  $: spentBySiteByQuote = sumByQuote(executions.filter((e) => e.success && e.operation_type === 'BUY' && e.initiated_by === 'USER'), quoteBySymbol, (e) => e.symbol, (e) => e.total_value)
+  $: spentByRobotsByQuote = sumByQuote(executions.filter((e) => e.success && (e.operation_type === 'DAILY_BUY' || e.operation_type === 'BUY') && e.initiated_by === 'BOT'), quoteBySymbol, (e) => e.symbol, (e) => e.total_value)
+  $: earnedBySiteByQuote = sumByQuote(executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'USER'), quoteBySymbol, (e) => e.symbol, (e) => e.total_value)
+  $: earnedByRobotsByQuote = sumByQuote(executions.filter((e) => e.success && e.operation_type === 'SELL' && e.initiated_by === 'BOT'), quoteBySymbol, (e) => e.symbol, (e) => e.total_value)
+  $: realizedTotal = convertedTotalValue(realizedByQuote, displayCode, rates)
+  // Profit/loss coloring only applies over a fully-converted sum — with an unconvertible leftover the
+  // converted subtotal's sign could contradict the full picture, so the card stays neutral.
+  $: realizedMixed = hasUnconvertedParts(realizedByQuote, displayCode, rates)
   $: acquiredBySymbol = aggregateQuantity(operations)
+
+  // --- Display currency + conversion rates --------------------------------------------------------
+  // Every quote currency the user's data touches (positions, history, robots).
+  $: allQuoteCurrencies = [
+    ...new Set(
+      [...operations.map((op) => op.symbol), ...executions.map((e) => e.symbol), ...robots.map((robot) => robot.symbol)].map(
+        (symbol) => quoteAssetFor(symbol, quoteBySymbol)
+      )
+    )
+  ].filter(Boolean)
+  // Auto display currency = the quote currency with the most invested; new accounts default by locale.
+  // The picker persists an explicit choice in localStorage (displayCurrency store).
+  $: dominantQuote = Object.entries(investedByQuote).filter(([code]) => code).sort((a, b) => b[1] - a[1])[0]?.[0] || ''
+  $: displayCode = ($displayCurrency || dominantQuote || ($intlLocale.startsWith('pt') ? 'BRL' : 'USDT')).toUpperCase()
+  $: displayOptions = [...new Set([displayCode, ...allQuoteCurrencies, 'BRL', 'USDT', 'USDC', 'EUR', 'BTC'])].filter(Boolean)
+
+  // Market rates quote-currency → display-currency (1 when equal). A missing rate (e.g. testnet's tiny
+  // symbol list) degrades gracefully: formatConvertedTotal shows those parts unconverted.
+  let rates: Record<string, number> = {}
+  let lastRatesKey = ''
+  $: ratesKey = displayCode + '|' + [...allQuoteCurrencies].sort().join(',')
+  $: if (ratesKey !== lastRatesKey) {
+    lastRatesKey = ratesKey
+    loadRates()
+  }
+  function onDisplayCurrencyChange(event: Event) {
+    const select = event.currentTarget as HTMLSelectElement
+    setDisplayCurrency(select.value)
+  }
+
+  // Monotonic sequence so an older in-flight fetch (larger/smaller currency set OR older display
+  // currency) can never overwrite the result of a newer one.
+  let ratesRequestSequence = 0
+  async function loadRates() {
+    const requestId = ++ratesRequestSequence
+    const target = displayCode
+    const sources = allQuoteCurrencies.filter((code) => code && code !== target)
+    const entries = await Promise.all(
+      sources.map(async (code) => {
+        try {
+          return [code, (await api.getRate(code, target)).rate] as const
+        } catch {
+          return [code, 0] as const
+        }
+      })
+    )
+    if (requestId !== ratesRequestSequence) return
+    rates = Object.fromEntries(entries)
+  }
+
+  // "Available to buy" chips: the free spot balance of each quote currency the user trades with.
+  $: availableChips = [...new Set([...allQuoteCurrencies, displayCode])]
+    .filter(Boolean)
+    .map((asset) => ({ asset, free: freeOf(asset) }))
+    .filter((chip) => chip.free > 0 || allQuoteCurrencies.includes(chip.asset))
+    .slice(0, 4)
   $: hasProfitData = operations.length > 0
   function aggregateQuantity(list: Operation[]): { symbol: string; quantity: number }[] {
     const totals: Record<string, number> = {}
@@ -194,9 +272,27 @@
 
   async function loadSymbols() {
     try {
-      symbols = (await api.getSymbols()).symbols || []
+      symbolInfos = (await api.getSymbols()).symbols || []
+      const quotes: Record<string, string> = {}
+      const bases: Record<string, string> = {}
+      for (const info of symbolInfos) {
+        quotes[info.symbol] = info.quote
+        bases[info.symbol] = info.base
+      }
+      quoteBySymbol = quotes
+      baseBySymbol = bases
     } catch {
-      symbols = []
+      symbolInfos = []
+    }
+  }
+
+  async function loadBalances() {
+    try {
+      const response = await api.getBalances()
+      balancesConnected = response.connected
+      spotBalances = Object.fromEntries((response.balances || []).map((balance) => [balance.asset, balance]))
+    } catch {
+      // Best-effort hint — keep whatever we showed last rather than flashing it away.
     }
   }
 
@@ -243,10 +339,10 @@
   function pnlTooltip(operation: Operation): string {
     const current = currentPrices[operation.symbol] || 0
     return [
-      $t('ops.pnlBuy', { price: fmt(operation.purchase_price_per_unit) }),
-      $t('ops.pnlNow', { price: fmt(current) }),
+      $t('ops.pnlBuy', { price: money(operation.purchase_price_per_unit, operation.symbol) }),
+      $t('ops.pnlNow', { price: money(current, operation.symbol) }),
       $t('ops.pnlProfit', {
-        value: (pnlValue(operation) >= 0 ? '+' : '') + fmt(pnlValue(operation)),
+        value: (pnlValue(operation) >= 0 ? '+' : '') + money(pnlValue(operation), operation.symbol),
         pct: (pnlPct(operation) >= 0 ? '+' : '') + pnlPct(operation).toFixed(2) + '%'
       })
     ].join('\n')
@@ -266,6 +362,7 @@
       await loadExecutions()
       loadSymbols()
       loadRobots()
+      loadBalances()
       selectedRobotId = null
       creatingRobot = false
     } catch (e) {
@@ -287,6 +384,7 @@
       await loadAll()
       await loadExecutions()
       loadRobots()
+      loadBalances()
       selectedRobotId = null
       creatingRobot = false
     } catch (e) {
@@ -310,6 +408,7 @@
       await loadExecutions()
       loadSymbols()
       loadRobots()
+      loadBalances()
       selectedRobotId = null
       creatingRobot = false
       credEnv = environment
@@ -407,12 +506,13 @@
         $t('buy.bought', {
           qty: fmt(operation.quantity),
           symbol: operation.symbol,
-          price: fmt(operation.purchase_price_per_unit)
+          price: money(operation.purchase_price_per_unit, operation.symbol)
         }),
         'success'
       )
       operations = await api.getOperations()
       loadExecutions()
+      loadBalances()
     } catch (e) {
       pushToast(translateError($t, e), 'error')
     } finally {
@@ -428,6 +528,7 @@
       pushToast($t('ops.sold'), 'success')
       operations = await api.getOperations()
       loadExecutions()
+      loadBalances()
     } catch (e) {
       pushToast(translateError($t, e), 'error')
     } finally {
@@ -443,6 +544,7 @@
       pushToast($t('ops.sellPlaced'), 'success')
       operations = await api.getOperations()
       loadExecutions()
+      loadBalances()
     } catch (e) {
       pushToast(translateError($t, e), 'error')
     } finally {
@@ -562,9 +664,16 @@
     loadSymbols()
     loadExecutions()
     loadRobots()
-    // Keep the Positions P/L arrows fresh while that sub-tab is open (backend caches prices for 5s).
+    loadBalances()
+    // Keep the Positions P/L arrows, the available-balance hints and the display-currency rates fresh
+    // (backend caches: prices 5s, balances 15s — these polls are cheap).
     pricesTimer = setInterval(() => {
+      // No point refreshing a dashboard nobody is looking at — and the balance poll is a real
+      // (weight-20) Binance call per user, so skip ticks while the tab is hidden.
+      if (typeof document !== 'undefined' && document.hidden) return
       if (opsView === 'positions') loadPositionPrices()
+      loadBalances()
+      loadRates()
     }, 30000)
   })
 
@@ -693,17 +802,20 @@
           <label for="trade-symbol">{$t('buy.pair')}</label>
           <SymbolAutocomplete id="trade-symbol" bind:value={tradeSymbol} options={symbols} placeholder="BTCUSDT" on:select={checkPrice} on:commit={checkPrice} />
         </div>
-        {#if tradePrice !== null}<div class="muted mt-2">{$t('buy.currentPrice', { price: fmt(tradePrice) })}</div>{/if}
+        {#if tradePrice !== null}<div class="muted mt-2">{$t('buy.currentPrice', { price: money(tradePrice, tradeSymbol) })}</div>{/if}
         <div class="field">
-          <label for="trade-amount">{$t('buy.amount')}</label>
+          <label for="trade-amount">{quoteOf(tradeSymbol) ? $t('buy.amountIn', { quote: quoteOf(tradeSymbol) }) : $t('buy.amount')}</label>
           <input id="trade-amount" type="number" bind:value={tradeAmount} min="0" step="0.01" />
+          {#if balancesConnected && quoteOf(tradeSymbol)}
+            <span class="muted">{$t('buy.available', { v: formatMoney(freeOf(quoteOf(tradeSymbol)), quoteOf(tradeSymbol), $intlLocale) })}</span>
+          {/if}
           {#if tradeFilters && tradeFilters.min_notional > 0}
-            <span class="muted">{$t('buy.minOrder', { min: fmt(tradeFilters.min_notional) })}</span>
+            <span class="muted">{$t('buy.minOrder', { min: money(tradeFilters.min_notional, tradeSymbol) })}</span>
           {/if}
-          {#if quoteAssetOf(tradeSymbol)}
-            <span class="muted">{$t('buy.spotHint', { quote: quoteAssetOf(tradeSymbol) })}</span>
+          {#if quoteOf(tradeSymbol)}
+            <span class="muted">{$t('buy.spotHint', { quote: quoteOf(tradeSymbol) })}</span>
           {/if}
-          {#if belowMinimum && tradeFilters}<span class="error">{$t('buy.belowMin', { min: fmt(tradeFilters.min_notional) })}</span>{/if}
+          {#if belowMinimum && tradeFilters}<span class="error">{$t('buy.belowMin', { min: money(tradeFilters.min_notional, tradeSymbol) })}</span>{/if}
         </div>
         <div class="field">
           <label for="trade-target">{$t('buy.target')}</label>
@@ -741,7 +853,7 @@
               <label class="switch-inline"><input type="checkbox" bind:checked={robotDraft.is_enabled} /> {$t('robots.master')}</label>
             </div>
             {#if robotDraft.is_enabled && robotDraft.capital_threshold > 0}
-              <p class="muted">{$t('bot.summary', { time: formatHour(robotDailyHourLocal), capital: fmt(robotDraft.capital_threshold), symbol: robotDraft.symbol, target: robotDraft.target_profit_percent })}</p>
+              <p class="muted">{$t('bot.summary', { time: formatHour(robotDailyHourLocal), capital: money(robotDraft.capital_threshold, robotDraft.symbol), symbol: robotDraft.symbol, target: robotDraft.target_profit_percent })}</p>
               {#if !connected}<p class="warn">{$t('bot.needsConnection')}</p>{/if}
               {#if robotProductionNeedsLive}<p class="warn">{$t('bot.needsLive')}</p>{/if}
             {:else}
@@ -756,19 +868,22 @@
           <div class="field mt-4">
             <label for="robot-coin">{$t('robots.coin')}</label>
             <input id="robot-coin" value={robotDraft.symbol} disabled />
-            {#if quoteAssetOf(robotDraft.symbol)}<span class="muted">{$t('buy.spotHint', { quote: quoteAssetOf(robotDraft.symbol) })}</span>{/if}
+            {#if quoteOf(robotDraft.symbol)}<span class="muted">{$t('buy.spotHint', { quote: quoteOf(robotDraft.symbol) })}</span>{/if}
+            {#if balancesConnected && quoteOf(robotDraft.symbol)}
+              <span class="muted">{$t('buy.available', { v: formatMoney(freeOf(quoteOf(robotDraft.symbol)), quoteOf(robotDraft.symbol), $intlLocale) })}</span>
+            {/if}
           </div>
           <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
-              <label for="robot-capital">{$t('settings.capital')}</label>
+              <label for="robot-capital">{$t('settings.capital')}{quoteOf(robotDraft.symbol) ? ' (' + quoteOf(robotDraft.symbol) + ')' : ''}</label>
               <input id="robot-capital" type="number" bind:value={robotDraft.capital_threshold} min="0" step="0.01" />
             </div>
             <div class="field" style="margin-top:0">
-              <label for="robot-max-invested">{$t('settings.maxInvested')}</label>
+              <label for="robot-max-invested">{$t('settings.maxInvested')}{quoteOf(robotDraft.symbol) ? ' (' + quoteOf(robotDraft.symbol) + ')' : ''}</label>
               <input id="robot-max-invested" type="number" bind:value={robotDraft.max_invested} min="0" step="0.01" placeholder={$t('settings.maxInvestedNone')} />
             </div>
           </div>
-          <p class="muted">{$t('settings.maxInvestedHelp')}{#if maxOrderQuoteAmount > 0} {$t('settings.maxOrderHelp', { max: fmt(maxOrderQuoteAmount) })}{/if}</p>
+          <p class="muted">{$t('settings.maxInvestedHelp')}{#if maxOrderQuoteAmount > 0} {$t('settings.maxOrderHelp', { max: money(maxOrderQuoteAmount, robotDraft.symbol) })}{/if}</p>
           <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
               <label for="robot-target">{$t('settings.target')}</label>
@@ -794,7 +909,7 @@
           <p class="muted tz-note">{$t('settings.timezoneNote', { tz: localTimeZone, offset: tzOffset })}</p>
           <p class="muted">{$t('settings.validityHelp')}</p>
           <div class="robot-editor-actions mt-5">
-            <button class="danger btn-sm" disabled={robotBusy} on:click={() => deleteRobot(robotDraft.id)}>{$t('robots.delete')}</button>
+            <button class="danger btn-sm" disabled={robotBusy} on:click={() => robotDraft && deleteRobot(robotDraft.id)}>{$t('robots.delete')}</button>
             <button class="btn-sm btn-primary" disabled={robotBusy} on:click={saveRobot}>{robotBusy ? $t('settings.saving') : $t('settings.save')}</button>
           </div>
         {:else if creatingRobot}
@@ -818,7 +933,7 @@
                   <span class="muted robot-sym">{robot.symbol}</span>
                   <span class="spacer"></span>
                   {#if robot.daily_purchase_enabled && robot.capital_threshold > 0}
-                    <span class="muted robot-dca">DCA {fmt(robot.capital_threshold)} · {formatHour(utcHourToLocal(robot.daily_purchase_hour_utc))}</span>
+                    <span class="muted robot-dca">DCA {money(robot.capital_threshold, robot.symbol)} · {formatHour(utcHourToLocal(robot.daily_purchase_hour_utc))}</span>
                   {/if}
                   <span class="robot-open">{$t('robots.open')} →</span>
                 </button>
@@ -854,9 +969,26 @@
         <button class="subtab" class:active={allocView === 'profit'} on:click={() => (allocView = 'profit')}>{$t('alloc.tabProfit')}</button>
       </div>
 
+      <div class="perf-toolbar mt-3">
+        <label class="display-pick" title={$t('display.convertedNote', { code: displayCode })}>
+          <span class="muted">{$t('display.currency')}</span>
+          <select value={displayCode} on:change={onDisplayCurrencyChange}>
+            {#each displayOptions as option (option)}<option value={option}>{option}</option>{/each}
+          </select>
+        </label>
+        {#if balancesConnected && availableChips.length}
+          <div class="avail-box" title={$t('display.availableHelp')}>
+            <span class="muted avail-label">{$t('display.available')}:</span>
+            {#each availableChips as chip (chip.asset)}
+              <span class="avail-chip">{formatMoney(chip.free, chip.asset, $intlLocale)}</span>
+            {/each}
+          </div>
+        {/if}
+      </div>
+
       {#if allocView === 'allocation'}
         <Collapsible variant="help" title={$t('help.summary')}><p>{$t('alloc.help')}</p></Collapsible>
-        <AllocationPanel {operations} />
+        <AllocationPanel {operations} {rates} {displayCode} {quoteBySymbol} />
       {:else}
         <Collapsible variant="help" title={$t('help.summary')}><p>{$t('prof.help')}</p></Collapsible>
         {#if !hasProfitData}
@@ -865,30 +997,31 @@
           <div class="prof-grid mt-3">
             <div class="prof-card">
               <span class="prof-label">{$t('prof.spent')}</span>
-              <span class="prof-value">{fmt(investedTotal)}</span>
-              <span class="prof-split">{$t('prof.you')}: {fmt(spentBySite)} · {$t('prof.robots')}: {fmt(spentByRobots)}</span>
+              <span class="prof-value">{formatConvertedTotal(investedByQuote, displayCode, rates, $intlLocale)}</span>
+              <span class="prof-split">{$t('prof.you')}: {formatConvertedTotal(spentBySiteByQuote, displayCode, rates, $intlLocale)} · {$t('prof.robots')}: {formatConvertedTotal(spentByRobotsByQuote, displayCode, rates, $intlLocale)}</span>
             </div>
             <div class="prof-card">
               <span class="prof-label">{$t('prof.received')}</span>
-              <span class="prof-value">{fmt(realizedProceeds)}</span>
-              <span class="prof-split">{$t('prof.you')}: {fmt(earnedBySite)} · {$t('prof.robots')}: {fmt(earnedByRobots)}</span>
+              <span class="prof-value">{formatConvertedTotal(receivedByQuote, displayCode, rates, $intlLocale)}</span>
+              <span class="prof-split">{$t('prof.you')}: {formatConvertedTotal(earnedBySiteByQuote, displayCode, rates, $intlLocale)} · {$t('prof.robots')}: {formatConvertedTotal(earnedByRobotsByQuote, displayCode, rates, $intlLocale)}</span>
             </div>
             <div class="prof-card">
               <span class="prof-label">{$t('prof.realized')}</span>
-              <span class="prof-value {realizedResult > 0 ? 'pos' : realizedResult < 0 ? 'neg' : ''}">{realizedResult >= 0 ? '+' : ''}{fmt(realizedResult)}</span>
-              <span class="prof-split">{$t('prof.openCost')}: {fmt(openCostTotal)}</span>
+              <span class="prof-value {!realizedMixed && realizedTotal > 0 ? 'pos' : !realizedMixed && realizedTotal < 0 ? 'neg' : ''}">{formatConvertedTotal(realizedByQuote, displayCode, rates, $intlLocale, true)}</span>
+              <span class="prof-split">{$t('prof.openCost')}: {formatConvertedTotal(openCostByQuote, displayCode, rates, $intlLocale)}</span>
             </div>
           </div>
+          <p class="muted converted-note mt-2">{$t('display.convertedNote', { code: displayCode })}</p>
           <div class="prof-coins mt-4">
             <span class="prof-label">{$t('prof.acquired')}</span>
             <div class="coin-chips">
               {#each acquiredBySymbol as item (item.symbol)}
-                <span class="coin-chip">{fmt(item.quantity)} {item.symbol}</span>
+                <span class="coin-chip">{fmt(item.quantity)} {baseOf(item.symbol)}</span>
               {/each}
             </div>
           </div>
           <div class="prof-chart-block mt-5">
-            <ProfitabilityPanel {operations} />
+            <ProfitabilityPanel {operations} {rates} {displayCode} {quoteBySymbol} />
           </div>
           <p class="muted mt-4">{$t('prof.taxNote')}</p>
         {/if}
@@ -935,9 +1068,9 @@
               <div class="trow">
                 <div class="pair-cell" data-label={$t('ops.pair')}>{operation.symbol}</div>
                 <div data-label={$t('ops.status')}><span class="badge {operation.status === 'SOLD' ? 'green' : 'amber'}">{operation.status}</span></div>
-                <div data-label={$t('ops.qty')}>{fmt(operation.quantity)}</div>
-                <div data-label={$t('ops.buyPrice')}>{fmt(operation.purchase_price_per_unit)}</div>
-                <div data-label={$t('ops.target')}>{fmt(operation.sell_target_price_per_unit)}</div>
+                <div data-label={$t('ops.qty')}>{fmt(operation.quantity)} {baseOf(operation.symbol)}</div>
+                <div data-label={$t('ops.buyPrice')}>{money(operation.purchase_price_per_unit, operation.symbol)}</div>
+                <div data-label={$t('ops.target')}>{operation.sell_target_price_per_unit === null ? '—' : money(operation.sell_target_price_per_unit, operation.symbol)}</div>
                 <div class="gold" data-label={$t('ops.targetPct')}>+{fmt(operation.target_profit_percent)}%</div>
                 <div class="sell-cell" data-label={$t('ops.sellOrder')}>
                   {#if operation.sell_order_id}
@@ -1001,9 +1134,9 @@
                 <div data-label={$t('hist.action')}><span class="badge {execution.operation_type === 'SELL' ? 'green' : execution.operation_type === 'SELL_ORDER_PLACED' ? 'blue' : execution.operation_type.startsWith('SELL_') ? 'red' : 'amber'}">{$t('hist.act.' + execution.operation_type)}</span></div>
                 <div data-label={$t('hist.by')}><span class="by-badge {execution.initiated_by === 'BOT' ? 'bot' : 'user'}">{execution.initiated_by === 'BOT' ? $t('hist.bot') : $t('hist.you')}</span></div>
                 <div data-label={$t('ops.pair')}>{execution.symbol}</div>
-                <div data-label={$t('hist.price')}>{fmt(execution.unit_price)}</div>
-                <div data-label={$t('hist.qty')}>{fmt(execution.quantity)}</div>
-                <div data-label={$t('hist.total')}>{fmt(execution.total_value)}</div>
+                <div data-label={$t('hist.price')}>{money(execution.unit_price, execution.symbol)}</div>
+                <div data-label={$t('hist.qty')}>{fmt(execution.quantity)} {baseOf(execution.symbol)}</div>
+                <div data-label={$t('hist.total')}>{money(execution.total_value, execution.symbol)}</div>
                 <div class="col-actions" data-label={$t('hist.result')}>
                   {#if execution.success}
                     <span class="badge green">✓</span>
@@ -1114,6 +1247,13 @@
 
   .ops-header { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .subtabs { display: flex; gap: var(--space-1); }
+  .perf-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+  .display-pick { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; }
+  .display-pick select { width: auto; height: 2rem; padding: 0 var(--space-2); font-size: var(--text-sm); font-weight: 700; }
+  .avail-box { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; cursor: help; }
+  .avail-label { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+  .avail-chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 2px var(--space-3); font-size: var(--text-sm); font-weight: 700; color: var(--green); white-space: nowrap; }
+  .converted-note { font-size: var(--text-xs); }
   .subtab { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); height: 2rem; padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-sm); }
   .subtab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
   .show-sold { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--muted); cursor: pointer; }

@@ -14,20 +14,24 @@
   } from 'chart.js'
   import { api, type Operation } from './api'
   import { t, intlLocale } from './i18n'
+  import { splitSymbol, formatMoney, convertAmount, formatConvertedTotal, type AmountsByCurrency } from './money'
 
   export let operations: Operation[] = []
+  // Conversion inputs from the Dashboard: quote-currency → display-currency market rates, the chosen
+  // display currency, and the exchange's symbol → quote map (fallback: suffix guess in splitSymbol).
+  export let rates: Record<string, number> = {}
+  export let displayCode = ''
+  export let quoteBySymbol: Record<string, string> = {}
 
   Chart.register(DoughnutController, ArcElement, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip)
 
   const palette = ['#ffd43b', '#adb5bd', '#9775fa', '#2bd66a', '#ff922b', '#4dabf7', '#ff5a5f', '#f783ac']
   const periods: Array<'24h' | '7d' | '1M' | '3M'> = ['24h', '7d', '1M', '3M']
-  // Quote assets, longest first so e.g. "USDT" matches before "USD".
-  const quoteAssets = ['USDT', 'FDUSD', 'BUSD', 'USDC', 'TUSD', 'BRL', 'EUR', 'GBP', 'TRY', 'USD', 'BTC', 'ETH', 'BNB']
 
   type Holding = { symbol: string; base: string; quote: string; quantity: number; price: number; value: number; color: string }
+  type DisplayHolding = Holding & { displayValue: number; displayCurrency: string }
 
   let holdings: Holding[] = []
-  let total = 0
   let selectedSymbol = ''
   let selectedPeriod: '24h' | '7d' | '1M' | '3M' = '24h'
   let seriesPoints: { t: number; close: number }[] = []
@@ -42,25 +46,27 @@
   let lastSeriesKey = ''
 
   $: hasHoldings = holdings.length > 0
-  $: selectedHolding = holdings.find((holding) => holding.symbol === selectedSymbol) || null
   $: mainQuote = holdings.length ? holdings[0].quote : ''
   $: changePercent =
     seriesPoints.length >= 2 ? ((seriesPoints[seriesPoints.length - 1].close - seriesPoints[0].close) / seriesPoints[0].close) * 100 : 0
 
-  function splitSymbol(symbol: string) {
-    for (const quote of quoteAssets) {
-      if (symbol.endsWith(quote) && symbol.length > quote.length) return { base: symbol.slice(0, -quote.length), quote }
-    }
-    return { base: symbol, quote: '' }
-  }
-
-  function formatMoney(value: number, quote: string) {
-    const fiat: Record<string, string> = { BRL: 'BRL', EUR: 'EUR', GBP: 'GBP', TRY: 'TRY', USDT: 'USD', USDC: 'USD', BUSD: 'USD', FDUSD: 'USD', TUSD: 'USD', USD: 'USD' }
-    if (fiat[quote]) {
-      return new Intl.NumberFormat($intlLocale, { style: 'currency', currency: fiat[quote] }).format(value)
-    }
-    return value.toLocaleString($intlLocale, { maximumFractionDigits: 8 }) + (quote ? ' ' + quote : '')
-  }
+  // Each holding's value converted into the display currency (per-coin AND the donut/percentages, so
+  // mixed quote currencies compare on one scale). A missing rate leaves that holding in its own quote
+  // — same as the pre-conversion behavior, never a silently wrong number.
+  $: displayHoldings = holdings.map((holding): DisplayHolding => {
+    const converted = convertAmount(holding.value, holding.quote, displayCode, rates)
+    return { ...holding, displayValue: converted.value, displayCurrency: converted.currency }
+  })
+  // Donut slices + legend percentages share this scale; when a rate is missing they are best-effort.
+  $: total = displayHoldings.reduce((sum, holding) => sum + holding.displayValue, 0)
+  $: totalCurrency = displayHoldings.length && displayHoldings.every((holding) => holding.displayCurrency === displayCode) ? displayCode : mainQuote
+  // The headline wallet total never sums mixed units: parts with no rate are appended separately by
+  // formatConvertedTotal instead of silently added into one number.
+  $: totalParts = holdings.reduce((parts, holding) => {
+    parts[holding.quote] = (parts[holding.quote] || 0) + holding.value
+    return parts
+  }, {} as AmountsByCurrency)
+  $: selectedHolding = displayHoldings.find((holding) => holding.symbol === selectedSymbol) || null
 
   function selectSymbol(symbol: string) {
     selectedSymbol = symbol
@@ -86,7 +92,7 @@
 
     holdings = symbols
       .map((symbol) => {
-        const { base, quote } = splitSymbol(symbol)
+        const { base, quote } = splitSymbol(symbol, quoteBySymbol[symbol])
         const quantity = quantityBySymbol.get(symbol) || 0
         const price = priceBySymbol.get(symbol) || 0
         return { symbol, base, quote, quantity, price, value: quantity * price, color: '' }
@@ -94,7 +100,6 @@
       .sort((first, second) => second.value - first.value)
       .map((holding, index) => ({ ...holding, color: palette[index % palette.length] }))
 
-    total = holdings.reduce((sum, holding) => sum + holding.value, 0)
     if (!selectedSymbol || !holdings.find((holding) => holding.symbol === selectedSymbol)) {
       selectedSymbol = holdings.length ? holdings[0].symbol : ''
     }
@@ -118,11 +123,13 @@
   function renderDonut() {
     if (!donutCanvas) return
     if (donutChart) donutChart.destroy()
+    const donutTotal = total
+    const donutCurrency = totalCurrency
     donutChart = new Chart(donutCanvas, {
       type: 'doughnut',
       data: {
-        labels: holdings.map((holding) => holding.base),
-        datasets: [{ data: holdings.map((holding) => holding.value), backgroundColor: holdings.map((holding) => holding.color), borderColor: '#15130d', borderWidth: 2 }]
+        labels: displayHoldings.map((holding) => holding.base),
+        datasets: [{ data: displayHoldings.map((holding) => holding.displayValue), backgroundColor: displayHoldings.map((holding) => holding.color), borderColor: '#15130d', borderWidth: 2 }]
       },
       options: {
         cutout: '64%',
@@ -131,8 +138,8 @@
           tooltip: {
             callbacks: {
               label: (context) => {
-                const percent = total > 0 ? (Number(context.parsed) / total) * 100 : 0
-                return ` ${context.label}: ${formatMoney(Number(context.parsed), mainQuote)} (${percent.toFixed(1)}%)`
+                const percent = donutTotal > 0 ? (Number(context.parsed) / donutTotal) * 100 : 0
+                return ` ${context.label}: ${formatMoney(Number(context.parsed), donutCurrency, $intlLocale)} (${percent.toFixed(1)}%)`
               }
             }
           }
@@ -186,7 +193,7 @@
             mode: 'index',
             intersect: false,
             callbacks: {
-              label: (context) => ' ' + formatMoney(Number(context.parsed.y), selectedHolding ? selectedHolding.quote : '')
+              label: (context) => ' ' + formatMoney(Number(context.parsed.y), selectedHolding ? selectedHolding.quote : '', $intlLocale)
             }
           }
         },
@@ -228,7 +235,8 @@
     }
   }
 
-  $: if (donutCanvas && holdings.length) renderDonut()
+  // displayHoldings (not holdings) so a rate/display-currency change re-renders the donut too.
+  $: if (donutCanvas && displayHoldings.length) renderDonut()
   $: if (lineCanvas && seriesPoints.length >= 2 && selectedHolding) renderLine()
 
   onDestroy(() => {
@@ -248,14 +256,14 @@
           {$t('alloc.walletTotal')}
           <span class="help-icon" title={$t('alloc.walletTotalHelp')} aria-label={$t('alloc.walletTotalHelp')} role="img">?</span>
         </div>
-        <div class="total-value">{formatMoney(total, mainQuote)}</div>
+        <div class="total-value">{formatConvertedTotal(totalParts, displayCode, rates, $intlLocale)}</div>
       </div>
       <div class="legend">
-        {#each holdings as holding}
+        {#each displayHoldings as holding (holding.symbol)}
           <button type="button" class="legend-row" class:active={holding.symbol === selectedSymbol} on:click={() => selectSymbol(holding.symbol)}>
             <span class="dot" style="background:{holding.color}"></span>
             <span class="lname">{holding.base}</span>
-            <span class="lpct">{total > 0 ? ((holding.value / total) * 100).toFixed(1) : '0.0'}%</span>
+            <span class="lpct">{total > 0 ? ((holding.displayValue / total) * 100).toFixed(1) : '0.0'}%</span>
           </button>
         {/each}
       </div>
@@ -276,7 +284,7 @@
         </div>
       </div>
 
-      <div class="sel-value">{selectedHolding ? formatMoney(selectedHolding.value, selectedHolding.quote) : '—'}</div>
+      <div class="sel-value">{selectedHolding ? formatMoney(selectedHolding.displayValue, selectedHolding.displayCurrency, $intlLocale) : '—'}</div>
 
       <div class="line-wrap">
         {#if seriesLoading}
@@ -289,10 +297,10 @@
       </div>
 
       <div class="coinpills">
-        {#each holdings as holding}
+        {#each displayHoldings as holding (holding.symbol)}
           <button type="button" class="coinpill" class:active={holding.symbol === selectedSymbol} on:click={() => selectSymbol(holding.symbol)}>
             <span class="dot" style="background:{holding.color}"></span>
-            {holding.base} · {formatMoney(holding.value, holding.quote)}
+            {holding.base} · {formatMoney(holding.displayValue, holding.displayCurrency, $intlLocale)}
           </button>
         {/each}
       </div>

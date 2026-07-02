@@ -47,6 +47,8 @@ func (handler *APIHandler) RegisterRoutes(router *http.ServeMux) {
 	router.HandleFunc("/api/v1/binance/symbols", handler.handleSymbols)
 	router.HandleFunc("/api/v1/binance/symbol-filters", handler.handleSymbolFilters)
 	router.HandleFunc("/api/v1/binance/klines", handler.handleKlines)
+	router.HandleFunc("/api/v1/binance/balances", handler.handleBalances)
+	router.HandleFunc("/api/v1/binance/rate", handler.handleConversionRate)
 }
 
 func (handler *APIHandler) requireUser(responseWriter http.ResponseWriter, request *http.Request) (int64, bool) {
@@ -300,12 +302,105 @@ func (handler *APIHandler) handleSymbols(responseWriter http.ResponseWriter, req
 	symbolService := service.NewBinanceSymbolService(handler.resolveEnvironmentConfiguration(request.Context(), userIdentifier))
 	operationContext, cancel := context.WithTimeout(request.Context(), 8*time.Second)
 	defer cancel()
-	availableSymbols, fetchError := symbolService.FetchAvailableSymbols(operationContext)
+	symbolDetails, fetchError := symbolService.FetchSymbolDetails(operationContext)
 	if fetchError != nil {
 		writeJSONError(responseWriter, http.StatusBadGateway, "Could not fetch tradable symbols.")
 		return
 	}
-	writeJSON(responseWriter, http.StatusOK, map[string]interface{}{"symbols": availableSymbols})
+	// Each entry carries base/quote so the SPA can label money amounts with the pair's quote currency
+	// instead of guessing it from the symbol suffix.
+	writeJSON(responseWriter, http.StatusOK, map[string]interface{}{"symbols": symbolDetails})
+}
+
+// handleBalances returns the user's non-zero Binance spot balances for the active environment — the
+// SPA shows "available to spend" next to buy/robot amounts. When the active environment has no keys
+// yet it reports connected=false with an empty list (not an error: the UI simply hides the hint).
+func (handler *APIHandler) handleBalances(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	operationContext, cancel := context.WithTimeout(request.Context(), 10*time.Second)
+	defer cancel()
+	environmentName := handler.credentialService.ActiveEnvironmentName(operationContext, userIdentifier)
+	configuration, configurationError := handler.credentialService.LoadActiveEnvironmentConfiguration(operationContext, userIdentifier)
+	if configurationError != nil {
+		writeJSONError(responseWriter, http.StatusInternalServerError, "Could not load the stored credentials.")
+		return
+	}
+	if configuration == nil {
+		writeJSON(responseWriter, http.StatusOK, map[string]interface{}{
+			"connected":   false,
+			"environment": environmentName,
+			"balances":    []service.SpotBalance{},
+		})
+		return
+	}
+
+	accountService := service.NewBinanceAccountService()
+	balances, balancesError := accountService.FetchSpotBalances(operationContext, userIdentifier, *configuration)
+	if balancesError != nil {
+		writeJSONError(responseWriter, http.StatusBadGateway, "Could not fetch the account balances.")
+		return
+	}
+	writeJSON(responseWriter, http.StatusOK, map[string]interface{}{
+		"connected":   true,
+		"environment": configuration.EnvironmentName,
+		"balances":    balances,
+	})
+}
+
+// handleConversionRate returns the current market rate between two assets (direct, inverse or bridged
+// pair), used by the SPA to convert mixed quote-currency totals into the user's display currency.
+func (handler *APIHandler) handleConversionRate(responseWriter http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet {
+		responseWriter.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	userIdentifier, authenticated := handler.requireUser(responseWriter, request)
+	if !authenticated {
+		return
+	}
+
+	fromAsset := strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("from")))
+	toAsset := strings.ToUpper(strings.TrimSpace(request.URL.Query().Get("to")))
+	if !isValidAssetCode(fromAsset) || !isValidAssetCode(toAsset) {
+		writeJSONError(responseWriter, http.StatusBadRequest, "Missing or invalid from/to asset parameters.")
+		return
+	}
+
+	conversionService := service.NewBinanceConversionService(handler.resolveEnvironmentConfiguration(request.Context(), userIdentifier))
+	operationContext, cancel := context.WithTimeout(request.Context(), 8*time.Second)
+	defer cancel()
+	rate, rateError := conversionService.Rate(operationContext, fromAsset, toAsset)
+	if rateError != nil {
+		if errors.Is(rateError, service.ErrNoConversionPath) {
+			writeJSONErrorCode(responseWriter, http.StatusNotFound, "No market rate available between these assets.", "rate_unavailable")
+			return
+		}
+		writeJSONError(responseWriter, http.StatusBadGateway, "Could not resolve the conversion rate.")
+		return
+	}
+	writeJSON(responseWriter, http.StatusOK, map[string]interface{}{"from": fromAsset, "to": toAsset, "rate": rate})
+}
+
+// isValidAssetCode accepts Binance-style asset tickers (BRL, USDT, 1INCH…): short uppercase
+// alphanumerics only, so arbitrary input never reaches URL building.
+func isValidAssetCode(assetCode string) bool {
+	if len(assetCode) < 2 || len(assetCode) > 12 {
+		return false
+	}
+	for _, character := range assetCode {
+		if (character < 'A' || character > 'Z') && (character < '0' || character > '9') {
+			return false
+		}
+	}
+	return true
 }
 
 // handleSymbolFilters returns the pair's trading rules (minimum order value, price/quantity steps) so

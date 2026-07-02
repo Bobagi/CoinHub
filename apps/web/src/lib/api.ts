@@ -88,6 +88,27 @@ export interface AccessHistory {
   total: number
 }
 
+// One tradable Binance pair with its two sides split out, so the UI can label amounts with the
+// pair's quote currency (the coin you pay with) without guessing from the symbol string.
+export interface SymbolInfo {
+  symbol: string
+  base: string
+  quote: string
+}
+
+// One asset's spot-wallet balance: free = available for new orders, locked = reserved by open orders.
+export interface SpotBalance {
+  asset: string
+  free: number
+  locked: number
+}
+
+export interface BalancesResponse {
+  connected: boolean // false when the active environment has no stored keys yet
+  environment: string
+  balances: SpotBalance[]
+}
+
 export interface Operation {
   id: number
   symbol: string
@@ -230,7 +251,13 @@ export const api = {
 
   getPrice: (symbol: string) =>
     request<{ symbol: string; price: number }>('GET', `/api/v1/binance/price?symbol=${encodeURIComponent(symbol)}`),
-  getSymbols: () => request<{ symbols: string[] }>('GET', '/api/v1/binance/symbols'),
+  getSymbols: () => request<{ symbols: SymbolInfo[] }>('GET', '/api/v1/binance/symbols'),
+  getBalances: () => request<BalancesResponse>('GET', '/api/v1/binance/balances'),
+  getRate: (from: string, to: string) =>
+    request<{ from: string; to: string; rate: number }>(
+      'GET',
+      `/api/v1/binance/rate?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`
+    ),
   getSymbolFilters: (symbol: string) =>
     request<{ symbol: string; min_notional: number; tick_size: number; step_size: number }>(
       'GET',

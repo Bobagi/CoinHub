@@ -3,13 +3,18 @@
   import { Chart, LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip } from 'chart.js'
   import { api, type Operation } from './api'
   import { t, intlLocale } from './i18n'
+  import { splitSymbol, formatMoney, formatConvertedTotal, convertedTotalValue, hasUnconvertedParts, type AmountsByCurrency } from './money'
 
   export let operations: Operation[] = []
+  // Conversion inputs from the Dashboard: quote-currency → display-currency market rates, the chosen
+  // display currency, and the exchange's symbol → quote map (fallback: suffix guess in splitSymbol).
+  export let rates: Record<string, number> = {}
+  export let displayCode = ''
+  export let quoteBySymbol: Record<string, string> = {}
 
   Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip)
 
   const periods: Array<'24h' | '7d' | '1M' | '3M'> = ['24h', '7d', '1M', '3M']
-  const quoteAssets = ['USDT', 'FDUSD', 'BUSD', 'USDC', 'TUSD', 'BRL', 'EUR', 'GBP', 'TRY', 'USD', 'BTC', 'ETH', 'BNB']
 
   type Position = {
     symbol: string; base: string; quote: string; quantity: number
@@ -28,24 +33,22 @@
 
   $: hasPositions = positions.length > 0
   $: selected = positions.find((position) => position.symbol === selectedSymbol) || null
-  $: totalCost = positions.reduce((sum, position) => sum + position.cost, 0)
-  $: totalValue = positions.reduce((sum, position) => sum + position.value, 0)
-  $: totalPnl = totalValue - totalCost
+
+  // "If you sell everything now", converted into the display currency. Parts with no rate are never
+  // summed into the converted number (that would mix units) — formatConvertedTotal appends them
+  // separately, and the % + profit/loss coloring only apply when everything converted.
+  $: costParts = positions.reduce((parts, position) => {
+    parts[position.quote] = (parts[position.quote] || 0) + position.cost
+    return parts
+  }, {} as AmountsByCurrency)
+  $: pnlParts = positions.reduce((parts, position) => {
+    parts[position.quote] = (parts[position.quote] || 0) + position.pnl
+    return parts
+  }, {} as AmountsByCurrency)
+  $: totalCost = convertedTotalValue(costParts, displayCode, rates)
+  $: totalPnl = convertedTotalValue(pnlParts, displayCode, rates)
   $: totalPnlPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0
-  $: mainQuote = positions.length ? positions[0].quote : ''
-
-  function splitSymbol(symbol: string) {
-    for (const quote of quoteAssets) {
-      if (symbol.endsWith(quote) && symbol.length > quote.length) return { base: symbol.slice(0, -quote.length), quote }
-    }
-    return { base: symbol, quote: '' }
-  }
-
-  function formatMoney(value: number, quote: string) {
-    const fiat: Record<string, string> = { BRL: 'BRL', EUR: 'EUR', GBP: 'GBP', TRY: 'TRY', USDT: 'USD', USDC: 'USD', BUSD: 'USD', FDUSD: 'USD', TUSD: 'USD', USD: 'USD' }
-    if (fiat[quote]) return new Intl.NumberFormat($intlLocale, { style: 'currency', currency: fiat[quote] }).format(value)
-    return value.toLocaleString($intlLocale, { maximumFractionDigits: 8 }) + (quote ? ' ' + quote : '')
-  }
+  $: partiallyConverted = hasUnconvertedParts(pnlParts, displayCode, rates) || hasUnconvertedParts(costParts, displayCode, rates)
 
   function formatTimeLabel(timestamp: number) {
     const date = new Date(timestamp)
@@ -76,7 +79,7 @@
 
     positions = symbols
       .map((symbol) => {
-        const { base, quote } = splitSymbol(symbol)
+        const { base, quote } = splitSymbol(symbol, quoteBySymbol[symbol])
         const { quantity, cost } = aggregate.get(symbol) as { quantity: number; cost: number }
         const price = priceBySymbol.get(symbol) || 0
         const avgCost = quantity > 0 ? cost / quantity : 0
@@ -155,7 +158,7 @@
             callbacks: {
               label: (context) => {
                 const prefix = context.dataset.label === 'avgCost' ? $t('prof.avgCost') + ': ' : $t('prof.current') + ': '
-                return ' ' + prefix + formatMoney(Number(context.parsed.y), selected ? selected.quote : '')
+                return ' ' + prefix + formatMoney(Number(context.parsed.y), selected ? selected.quote : '', $intlLocale)
               }
             }
           }
@@ -204,9 +207,9 @@
 {#if !hasPositions}
   <p class="muted mt-3">{$t('prof.none')}</p>
 {:else}
-  <div class="prof-summary {totalPnl >= 0 ? 'pos' : 'neg'}">
+  <div class="prof-summary {partiallyConverted ? '' : totalPnl >= 0 ? 'pos' : 'neg'}">
     <span class="ps-label">{$t('prof.ifSellNow')}</span>
-    <span class="ps-value">{totalPnl >= 0 ? '+' : ''}{formatMoney(totalPnl, mainQuote)} · {totalPnl >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%</span>
+    <span class="ps-value">{formatConvertedTotal(pnlParts, displayCode, rates, $intlLocale, true)}{#if !partiallyConverted} · {totalPnl >= 0 ? '+' : ''}{totalPnlPct.toFixed(1)}%{/if}</span>
   </div>
 
   <div class="coinpills mt-3">
@@ -227,8 +230,8 @@
       </div>
     </div>
     <div class="prof-meta">
-      <span>{$t('prof.avgCost')}: <strong class="cost-val">{formatMoney(selected.avgCost, selected.quote)}</strong></span>
-      <span>{$t('prof.current')}: <strong class={selected.pnl >= 0 ? 'up' : 'down'}>{formatMoney(selected.price, selected.quote)}</strong></span>
+      <span>{$t('prof.avgCost')}: <strong class="cost-val">{formatMoney(selected.avgCost, selected.quote, $intlLocale)}</strong></span>
+      <span>{$t('prof.current')}: <strong class={selected.pnl >= 0 ? 'up' : 'down'}>{formatMoney(selected.price, selected.quote, $intlLocale)}</strong></span>
     </div>
     <div class="line-wrap">
       {#if seriesLoading}

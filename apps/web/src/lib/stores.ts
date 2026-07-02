@@ -171,6 +171,28 @@ if (typeof window !== 'undefined') {
   window.addEventListener('hashchange', () => { route.set(routeFromHash()); scrollToTop() })
 }
 
+// --- Display currency ----------------------------------------------------------------------------
+// The one currency all AGGREGATE money (profitability cards, allocation totals) is converted into at
+// current market rates. '' = auto: the Dashboard resolves it to the user's dominant quote currency
+// (per-row amounts always stay in the pair's own quote currency). Persisted so it survives reloads.
+const DISPLAY_CURRENCY_KEY = 'coinhub_display_currency'
+
+function readDisplayCurrency(): string {
+  if (typeof localStorage === 'undefined') return ''
+  return (localStorage.getItem(DISPLAY_CURRENCY_KEY) || '').toUpperCase()
+}
+
+export const displayCurrency = writable<string>(readDisplayCurrency())
+
+export function setDisplayCurrency(code: string) {
+  const normalized = (code || '').toUpperCase()
+  if (typeof localStorage !== 'undefined') {
+    if (normalized) localStorage.setItem(DISPLAY_CURRENCY_KEY, normalized)
+    else localStorage.removeItem(DISPLAY_CURRENCY_KEY)
+  }
+  displayCurrency.set(normalized)
+}
+
 // --- Cookie / non-essential script consent (LGPD) ----------------------------------------------
 // CoinHub sets only one strictly-necessary cookie (the session), which doesn't require consent.
 // Everything NON-essential is opt-in and must be gated on `cookieConsent === 'accepted'`:

@@ -378,6 +378,11 @@ func (service *UserTradingService) ListOpenOrders(loadContext context.Context, u
 }
 
 func (service *UserTradingService) logExecution(operationContext context.Context, userIdentifier int64, environment string, initiatedBy string, tradingPairSymbol string, operationType string, unitPrice float64, quantity float64, totalValue float64, success bool, cause error, orderIdentifier *string) {
+	// Any successful order moves (or locks) balance — drop the cached spot balances so the SPA's
+	// "available" hint reflects it on the next read instead of waiting out the cache TTL.
+	if success {
+		InvalidateCachedSpotBalances(userIdentifier, environment)
+	}
 	var errorMessage *string
 	if cause != nil {
 		message := cause.Error()
