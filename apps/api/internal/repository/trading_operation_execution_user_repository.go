@@ -45,6 +45,28 @@ func (repository *PostgresTradingOperationExecutionRepository) LogExecutionForUs
 	return executionIdentifier, nil
 }
 
+// ListLatestBotExecutionFailuresBySymbol returns, for each pair whose MOST RECENT bot-initiated
+// execution failed, that failed execution. It powers the per-robot warning icon: a robot whose last
+// action failed is "currently failing"; once a newer bot action succeeds the pair drops out.
+func (repository *PostgresTradingOperationExecutionRepository) ListLatestBotExecutionFailuresBySymbol(loadContext context.Context, userIdentifier int64, environment string) ([]domain.TradingOperationExecution, error) {
+	rows, queryError := repository.Database.QueryContext(
+		loadContext,
+		`SELECT `+userExecutionColumns+` FROM (
+		    SELECT DISTINCT ON (trading_pair_symbol) *
+		    FROM trading_operation_executions
+		    WHERE user_id = $1 AND binance_environment = $2 AND initiated_by = 'BOT'
+		    ORDER BY trading_pair_symbol, executed_at DESC, id DESC
+		 ) latest_per_symbol
+		 WHERE success = false`,
+		userIdentifier, environment,
+	)
+	if queryError != nil {
+		return nil, queryError
+	}
+	defer rows.Close()
+	return scanUserExecutionRows(rows)
+}
+
 func (repository *PostgresTradingOperationExecutionRepository) ListRecentExecutionsForUser(loadContext context.Context, userIdentifier int64, environment string, limit int) ([]domain.TradingOperationExecution, error) {
 	rows, queryError := repository.Database.QueryContext(
 		loadContext,

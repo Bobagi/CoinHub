@@ -87,7 +87,7 @@ func main() {
 	userTradingService := service.NewUserTradingService(userCredentialService, userTradingSettingsRepository, tradingOperationRepository, tradingOperationExecutionRepository, maxOrderQuoteAmount)
 	operationsHandler := httpserver.NewOperationsHandler(sessionService, authService, agreementService, authHandler.CookieName, userTradingService)
 
-	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService)
+	robotService := service.NewRobotService(tradingRobotRepository, userCredentialService, tradingOperationExecutionRepository)
 	robotsHandler := httpserver.NewRobotsHandler(sessionService, authService, agreementService, authHandler.CookieName, robotService, maxOrderQuoteAmount)
 
 	// The worker runs as a guaranteed singleton-per-shard via a Postgres advisory lock, so the stateless

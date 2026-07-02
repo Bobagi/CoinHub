@@ -49,6 +49,14 @@ export interface CredentialStatus {
   configured_environments: string[]
 }
 
+// The robot's most recent bot action WHEN it failed (absent while the last action succeeded) — the
+// dashboard shows it as a warning icon on the robot with what happened.
+export interface RobotFailure {
+  operation_type: string
+  message: string
+  at: string // RFC3339
+}
+
 export interface Robot {
   id: number
   symbol: string
@@ -61,6 +69,7 @@ export interface Robot {
   daily_purchase_enabled: boolean
   sell_order_validity_days: number
   is_enabled: boolean
+  last_failure?: RobotFailure | null
 }
 
 export interface RobotsResponse {

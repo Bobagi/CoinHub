@@ -82,6 +82,38 @@ mercado. Implementado end-to-end:
   — série fica na moeda do par); percentuais do donut são best-effort se faltar cotação; B3/scraper
   fora do escopo (valores já vêm em BRL do Investidor10).
 
+### 2026-07-02 — 2ª rodada (feedback do operador): UX da moeda + AVISO DE FALHA POR ROBÔ
+Feedback testando a 1ª rodada: (a) o "Disponível para comprar" não seguia a moeda selecionada e ficava
+ao lado (não abaixo) do seletor; (b) queria o saldo como um CAMPO acima do "Valor" na Compra; (c) queria
+um ícone de aviso no robô quando compra/venda dele falha, com o motivo, e a falha no histórico.
+- **Descoberta importante:** falha da compra diária NÃO ia para o histórico — só `log.Printf` no
+  container (o ✗ do histórico só existia p/ stop-loss). E o retry a cada 30s dentro da hora-alvo teria
+  gerado spam se logasse por tentativa.
+- **Backend:** worker agora loga a falha do DAILY_BUY como execução `success=false` **no máx. 1×/dia
+  por robô** (`logDailyPurchaseFailureOncePerDay` + `HasFailedExecutionOfTypeSince`; retry continua a
+  cada tick; guard **fail-open** — erro de leitura não engole o log). O MESMO cap foi aplicado à falha
+  de stop-loss (`logBotSellFailureOncePerDay` — antes logava a cada tick ≈2.880 linhas/dia, achado do
+  code-review). `GET /api/v1/robots` devolve `last_failure {operation_type, message, at}` por robô =
+  última execução BOT do símbolo QUANDO falhou (some quando uma ação nova dá certo) —
+  `ListLatestBotExecutionFailuresBySymbol` (DISTINCT ON, coberto pelo índice user+env),
+  `RobotService.ListRobotsWithStatus`. Falhas MANUAIS seguem só no toast (decisão: feedback imediato
+  já existe; escopo do aviso é o robô).
+- **Frontend:** barra da seção Desempenho empilhada (seletor em cima, "Disponível para comprar"
+  logo abaixo, **valor único convertido para a moeda selecionada**, tooltip com o detalhe por moeda —
+  moedas com saldo 0 aparecem como R$ 0,00, sinal útil); `BalanceCallout.svelte` (novo, reutilizável)
+  acima do campo Valor na Compra e no editor de robô; ⚠ âmbar no robô (lista via `.badge-wrap` — o
+  ícone precisa de posição explícita no grid 3-zonas do mobile, ver rubric — e linha `warn` no editor
+  com ação/quando/motivo via `robotWarnDetail`, fallback p/ tipo sem chave `hist.act.*`).
+- **Skills usadas (pedido explícito do operador):** `frontend-review` (mock fiel + página real; pegou
+  o ⚠ auto-posicionado numa 3ª linha órfã no mobile RODANDO em prod pré-fix, confirmou o fix live;
+  relatório em `.claude/frontend-review/2026-07-02-currency-robot-warn/`; lição promovida à rubric da
+  skill + pushada) e `code-review` medium (8 achados, todos corrigidos: fail-open do guard, spam do
+  stop-loss, moedas zeradas do tooltip, chave i18n crua, dedup de markup/texto, `ListRobots` morto,
+  displayCode fora do "disponível").
+- Verificado E2E com conta descartável (verificada+termos via DB, robô criado, falha injetada):
+  `last_failure` no payload, linha ✗ no histórico, aviso some com sucesso posterior; conta deletada
+  (cascade confirmado). `svelte-check` 0 erros; testes Go ok.
+
 ## ✅ RESOLVIDO 2026-06-29 — crash-loop do `coin-hub-api` (panic no market WebSocket)
 **Fix commitado em `main` + deployado + verificado** (api `Up`, `RestartCount=0`, 0 panics passando do
 ponto exato do crash, `dockerd` de ~143% → ~7% de CPU). Detalhe abaixo; o histórico do diagnóstico de

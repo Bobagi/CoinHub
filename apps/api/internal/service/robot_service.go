@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
 	"coin-hub/internal/domain"
 	"coin-hub/internal/repository"
@@ -19,15 +20,21 @@ var ErrRobotSymbolExists = errors.New("you already have a robot for this coin in
 // environment. Admins are unlimited (monetization hook: extra robots become a paid upgrade later).
 const StandardUserRobotLimitPerEnvironment = 1
 
+// robotFailureReader surfaces the latest bot-initiated failure per pair (see the repository method).
+type robotFailureReader interface {
+	ListLatestBotExecutionFailuresBySymbol(loadContext context.Context, userIdentifier int64, environment string) ([]domain.TradingOperationExecution, error)
+}
+
 // RobotService manages a user's trading robots, scoped to their active Binance environment, and
 // enforces the per-plan robot limit on creation.
 type RobotService struct {
 	repository        repository.TradingRobotRepository
 	credentialService *UserCredentialService
+	failureReader     robotFailureReader
 }
 
-func NewRobotService(repositoryInstance repository.TradingRobotRepository, credentialService *UserCredentialService) *RobotService {
-	return &RobotService{repository: repositoryInstance, credentialService: credentialService}
+func NewRobotService(repositoryInstance repository.TradingRobotRepository, credentialService *UserCredentialService, failureReader robotFailureReader) *RobotService {
+	return &RobotService{repository: repositoryInstance, credentialService: credentialService, failureReader: failureReader}
 }
 
 // RobotInput carries the editable robot fields coming from the API.
@@ -52,9 +59,55 @@ func RobotLimitForAdmin(isAdmin bool) int {
 	return StandardUserRobotLimitPerEnvironment
 }
 
-func (service *RobotService) ListRobots(operationContext context.Context, userIdentifier int64) ([]domain.TradingRobot, error) {
+// RobotLastFailure describes the most recent bot action for a robot's pair WHEN that action failed —
+// the UI shows it as a warning icon on the robot with what happened.
+type RobotLastFailure struct {
+	OperationType string
+	Message       string
+	At            time.Time
+}
+
+// RobotWithStatus is a robot plus its current failure state (nil = last bot action succeeded or none).
+type RobotWithStatus struct {
+	domain.TradingRobot
+	LastFailure *RobotLastFailure
+}
+
+// ListRobotsWithStatus lists the robots and attaches each one's last failure. Failure lookup is
+// best-effort: if it errors the robots still list, just without warnings.
+func (service *RobotService) ListRobotsWithStatus(operationContext context.Context, userIdentifier int64) ([]RobotWithStatus, error) {
 	environment := service.credentialService.ActiveEnvironmentName(operationContext, userIdentifier)
-	return service.repository.ListRobotsForUser(operationContext, userIdentifier, environment)
+	robots, listError := service.repository.ListRobotsForUser(operationContext, userIdentifier, environment)
+	if listError != nil {
+		return nil, listError
+	}
+
+	failuresBySymbol := make(map[string]RobotLastFailure)
+	if service.failureReader != nil {
+		if failures, failuresError := service.failureReader.ListLatestBotExecutionFailuresBySymbol(operationContext, userIdentifier, environment); failuresError == nil {
+			for _, failure := range failures {
+				message := ""
+				if failure.ErrorMessage != nil {
+					message = *failure.ErrorMessage
+				}
+				failuresBySymbol[failure.TradingPairSymbol] = RobotLastFailure{
+					OperationType: failure.OperationType,
+					Message:       message,
+					At:            failure.ExecutedAt,
+				}
+			}
+		}
+	}
+
+	robotsWithStatus := make([]RobotWithStatus, 0, len(robots))
+	for _, robot := range robots {
+		withStatus := RobotWithStatus{TradingRobot: robot}
+		if failure, present := failuresBySymbol[robot.TradingPairSymbol]; present {
+			withStatus.LastFailure = &failure
+		}
+		robotsWithStatus = append(robotsWithStatus, withStatus)
+	}
+	return robotsWithStatus, nil
 }
 
 func (service *RobotService) CreateRobot(operationContext context.Context, userIdentifier int64, isAdmin bool, input RobotInput) (*domain.TradingRobot, error) {

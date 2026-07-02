@@ -10,6 +10,7 @@
   import LegalFooter from './LegalFooter.svelte'
   import SymbolAutocomplete from './SymbolAutocomplete.svelte'
   import LockOverlay from './LockOverlay.svelte'
+  import BalanceCallout from './BalanceCallout.svelte'
   import Pagination from './Pagination.svelte'
   import Collapsible from './Collapsible.svelte'
 
@@ -214,12 +215,29 @@
     rates = Object.fromEntries(entries)
   }
 
-  // "Available to buy" chips: the free spot balance of each quote currency the user trades with.
-  $: availableChips = [...new Set([...allQuoteCurrencies, displayCode])]
-    .filter(Boolean)
-    .map((asset) => ({ asset, free: freeOf(asset) }))
-    .filter((chip) => chip.free > 0 || allQuoteCurrencies.includes(chip.asset))
-    .slice(0, 4)
+  // "Available to buy": the free spot balance of every quote currency the user trades with (0 kept —
+  // "you're out of BRL" is exactly the useful signal), shown as ONE value converted into the display
+  // currency (the whole toolbar follows the selected currency); the tooltip breaks it down per
+  // original currency.
+  $: availableParts = allQuoteCurrencies.reduce((parts, asset) => {
+    parts[asset] = freeOf(asset)
+    return parts
+  }, {} as AmountsByCurrency)
+  $: availableTooltip = [
+    $t('display.availableHelp'),
+    ...Object.entries(availableParts).map(([asset, value]) => formatMoney(value, asset, $intlLocale))
+  ].join('\n')
+
+  // One builder owns the robot-failure text; the list tooltip and the editor line both consume it.
+  // Falls back to the raw operation type when a history label is missing (never the raw i18n key).
+  $: actionLabel = (operationType: string) => {
+    const key = 'hist.act.' + operationType
+    const label = $t(key)
+    return label === key ? operationType : label
+  }
+  $: robotWarnDetail = (failure: NonNullable<Robot['last_failure']>) =>
+    `${actionLabel(failure.operation_type)} · ${$formatDateTime(failure.at)}: ${failure.message}`
+  $: robotWarnTooltip = (failure: NonNullable<Robot['last_failure']>) => $t('robots.warnTitle') + '\n' + robotWarnDetail(failure)
   $: hasProfitData = operations.length > 0
   function aggregateQuantity(list: Operation[]): { symbol: string; quantity: number }[] {
     const totals: Record<string, number> = {}
@@ -803,12 +821,12 @@
           <SymbolAutocomplete id="trade-symbol" bind:value={tradeSymbol} options={symbols} placeholder="BTCUSDT" on:select={checkPrice} on:commit={checkPrice} />
         </div>
         {#if tradePrice !== null}<div class="muted mt-2">{$t('buy.currentPrice', { price: money(tradePrice, tradeSymbol) })}</div>{/if}
+        {#if balancesConnected && quoteOf(tradeSymbol)}
+          <BalanceCallout quote={quoteOf(tradeSymbol)} free={freeOf(quoteOf(tradeSymbol))} />
+        {/if}
         <div class="field">
           <label for="trade-amount">{quoteOf(tradeSymbol) ? $t('buy.amountIn', { quote: quoteOf(tradeSymbol) }) : $t('buy.amount')}</label>
           <input id="trade-amount" type="number" bind:value={tradeAmount} min="0" step="0.01" />
-          {#if balancesConnected && quoteOf(tradeSymbol)}
-            <span class="muted">{$t('buy.available', { v: formatMoney(freeOf(quoteOf(tradeSymbol)), quoteOf(tradeSymbol), $intlLocale) })}</span>
-          {/if}
           {#if tradeFilters && tradeFilters.min_notional > 0}
             <span class="muted">{$t('buy.minOrder', { min: money(tradeFilters.min_notional, tradeSymbol) })}</span>
           {/if}
@@ -852,6 +870,9 @@
               <span class="spacer"></span>
               <label class="switch-inline"><input type="checkbox" bind:checked={robotDraft.is_enabled} /> {$t('robots.master')}</label>
             </div>
+            {#if selectedRobot?.last_failure}
+              <p class="warn">⚠ {$t('robots.warnTitle')} — {robotWarnDetail(selectedRobot.last_failure)}</p>
+            {/if}
             {#if robotDraft.is_enabled && robotDraft.capital_threshold > 0}
               <p class="muted">{$t('bot.summary', { time: formatHour(robotDailyHourLocal), capital: money(robotDraft.capital_threshold, robotDraft.symbol), symbol: robotDraft.symbol, target: robotDraft.target_profit_percent })}</p>
               {#if !connected}<p class="warn">{$t('bot.needsConnection')}</p>{/if}
@@ -869,10 +890,10 @@
             <label for="robot-coin">{$t('robots.coin')}</label>
             <input id="robot-coin" value={robotDraft.symbol} disabled />
             {#if quoteOf(robotDraft.symbol)}<span class="muted">{$t('buy.spotHint', { quote: quoteOf(robotDraft.symbol) })}</span>{/if}
-            {#if balancesConnected && quoteOf(robotDraft.symbol)}
-              <span class="muted">{$t('buy.available', { v: formatMoney(freeOf(quoteOf(robotDraft.symbol)), quoteOf(robotDraft.symbol), $intlLocale) })}</span>
-            {/if}
           </div>
+          {#if balancesConnected && quoteOf(robotDraft.symbol)}
+            <BalanceCallout quote={quoteOf(robotDraft.symbol)} free={freeOf(quoteOf(robotDraft.symbol))} />
+          {/if}
           <div class="grid-2 mt-4">
             <div class="field" style="margin-top:0">
               <label for="robot-capital">{$t('settings.capital')}{quoteOf(robotDraft.symbol) ? ' (' + quoteOf(robotDraft.symbol) + ')' : ''}</label>
@@ -928,7 +949,12 @@
             <div class="robot-list mt-3">
               {#each robots as robot (robot.id)}
                 <button class="robot-row" on:click={() => selectRobot(robot)}>
-                  <span class="badge {robot.is_enabled ? 'green' : 'amber'}">{robot.is_enabled ? $t('robots.on') : $t('robots.off')}</span>
+                  <span class="badge-wrap">
+                    <span class="badge {robot.is_enabled ? 'green' : 'amber'}">{robot.is_enabled ? $t('robots.on') : $t('robots.off')}</span>
+                    {#if robot.last_failure}
+                      <span class="robot-warn" role="img" aria-label={robotWarnTooltip(robot.last_failure)} title={robotWarnTooltip(robot.last_failure)}>⚠</span>
+                    {/if}
+                  </span>
                   <strong class="robot-name">{robot.name}</strong>
                   <span class="muted robot-sym">{robot.symbol}</span>
                   <span class="spacer"></span>
@@ -976,12 +1002,10 @@
             {#each displayOptions as option (option)}<option value={option}>{option}</option>{/each}
           </select>
         </label>
-        {#if balancesConnected && availableChips.length}
-          <div class="avail-box" title={$t('display.availableHelp')}>
+        {#if balancesConnected && allQuoteCurrencies.length}
+          <div class="avail-line" title={availableTooltip}>
             <span class="muted avail-label">{$t('display.available')}:</span>
-            {#each availableChips as chip (chip.asset)}
-              <span class="avail-chip">{formatMoney(chip.free, chip.asset, $intlLocale)}</span>
-            {/each}
+            <strong class="avail-value">{formatConvertedTotal(availableParts, displayCode, rates, $intlLocale)}</strong>
           </div>
         {/if}
       </div>
@@ -1215,7 +1239,7 @@
   @media (max-width: 600px) {
     .robot-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; column-gap: var(--space-2); row-gap: var(--space-1); }
     .robot-row .spacer { display: none; }
-    .robot-row .badge { grid-row: 1; grid-column: 1; justify-self: start; }
+    .robot-row .badge-wrap { grid-row: 1; grid-column: 1; justify-self: start; }
     .robot-row .robot-name { grid-row: 1; grid-column: 2; justify-self: center; text-align: center; }
     .robot-row .robot-sym { grid-row: 1; grid-column: 3; justify-self: end; }
     .robot-row .robot-dca { grid-row: 2; grid-column: 1 / 3; justify-self: start; }
@@ -1247,13 +1271,19 @@
 
   .ops-header { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
   .subtabs { display: flex; gap: var(--space-1); }
-  .perf-toolbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+  /* The toolbar stacks: currency picker first, the available-to-buy line right below it — the value
+     follows the SELECTED display currency, so the two read as one unit. */
+  .perf-toolbar { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
   .display-pick { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); cursor: pointer; }
   .display-pick select { width: auto; height: 2rem; padding: 0 var(--space-2); font-size: var(--text-sm); font-weight: 700; }
-  .avail-box { display: inline-flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; cursor: help; }
+  .avail-line { display: inline-flex; align-items: center; gap: var(--space-2); cursor: help; }
   .avail-label { font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
-  .avail-chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-pill); padding: 2px var(--space-3); font-size: var(--text-sm); font-weight: 700; color: var(--green); white-space: nowrap; }
+  .avail-value { color: var(--green); font-weight: 800; font-size: var(--text-sm); }
   .converted-note { font-size: var(--text-xs); }
+
+  /* badge + warning travel together (one grid cell in the mobile 3-zone robot row). */
+  .badge-wrap { display: inline-flex; align-items: center; gap: var(--space-2); }
+  .robot-warn { color: var(--amber); cursor: help; font-size: var(--text-sm); }
   .subtab { background: var(--surface-2); border: 1px solid var(--border); color: var(--muted); height: 2rem; padding: 0 var(--space-3); font-size: var(--text-xs); font-weight: 700; border-radius: var(--radius-sm); }
   .subtab.active { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }
   .show-sold { display: inline-flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--muted); cursor: pointer; }

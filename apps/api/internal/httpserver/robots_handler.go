@@ -63,17 +63,25 @@ func (handler *RobotsHandler) resolveUser(responseWriter http.ResponseWriter, re
 }
 
 type robotPayload struct {
-	ID                    int64    `json:"id"`
-	Symbol                string   `json:"symbol"`
-	Name                  string   `json:"name"`
-	CapitalThreshold      float64  `json:"capital_threshold"`
-	MaxInvested           float64  `json:"max_invested"`
-	TargetProfitPercent   float64  `json:"target_profit_percent"`
-	StopLossPercent       *float64 `json:"stop_loss_percent"`
-	DailyPurchaseHourUTC  int      `json:"daily_purchase_hour_utc"`
-	DailyPurchaseEnabled  bool     `json:"daily_purchase_enabled"`
-	SellOrderValidityDays int      `json:"sell_order_validity_days"`
-	IsEnabled             bool     `json:"is_enabled"`
+	ID                    int64               `json:"id"`
+	Symbol                string              `json:"symbol"`
+	Name                  string              `json:"name"`
+	CapitalThreshold      float64             `json:"capital_threshold"`
+	MaxInvested           float64             `json:"max_invested"`
+	TargetProfitPercent   float64             `json:"target_profit_percent"`
+	StopLossPercent       *float64            `json:"stop_loss_percent"`
+	DailyPurchaseHourUTC  int                 `json:"daily_purchase_hour_utc"`
+	DailyPurchaseEnabled  bool                `json:"daily_purchase_enabled"`
+	SellOrderValidityDays int                 `json:"sell_order_validity_days"`
+	IsEnabled             bool                `json:"is_enabled"`
+	LastFailure           *robotFailurePayload `json:"last_failure,omitempty"`
+}
+
+// robotFailurePayload is the robot's most recent bot action WHEN it failed — the UI's warning icon.
+type robotFailurePayload struct {
+	OperationType string `json:"operation_type"`
+	Message       string `json:"message"`
+	At            string `json:"at"` // RFC3339
 }
 
 type robotInputPayload struct {
@@ -115,13 +123,13 @@ func (handler *RobotsHandler) handleRobots(responseWriter http.ResponseWriter, r
 	case http.MethodGet:
 		operationContext, cancel := context.WithTimeout(request.Context(), 6*time.Second)
 		defer cancel()
-		robots, listError := handler.robotService.ListRobots(operationContext, currentUser.Identifier)
+		robots, listError := handler.robotService.ListRobotsWithStatus(operationContext, currentUser.Identifier)
 		if listError != nil {
 			writeJSONError(responseWriter, http.StatusInternalServerError, "Could not load robots.")
 			return
 		}
 		writeJSON(responseWriter, http.StatusOK, map[string]interface{}{
-			"robots":                 toRobotPayloads(robots),
+			"robots":                 toRobotStatusPayloads(robots),
 			"limit":                  service.RobotLimitForAdmin(currentUser.IsAdmin), // 0 = unlimited
 			"is_admin":               currentUser.IsAdmin,
 			"max_order_quote_amount": handler.maxOrderQuoteAmount, // 0 = no per-order cap
@@ -251,10 +259,18 @@ func toRobotPayload(robot domain.TradingRobot) robotPayload {
 	}
 }
 
-func toRobotPayloads(robots []domain.TradingRobot) []robotPayload {
+func toRobotStatusPayloads(robots []service.RobotWithStatus) []robotPayload {
 	payloads := make([]robotPayload, 0, len(robots))
 	for _, robot := range robots {
-		payloads = append(payloads, toRobotPayload(robot))
+		payload := toRobotPayload(robot.TradingRobot)
+		if robot.LastFailure != nil {
+			payload.LastFailure = &robotFailurePayload{
+				OperationType: robot.LastFailure.OperationType,
+				Message:       robot.LastFailure.Message,
+				At:            robot.LastFailure.At.Format(time.RFC3339),
+			}
+		}
+		payloads = append(payloads, payload)
 	}
 	return payloads
 }

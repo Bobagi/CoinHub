@@ -20,6 +20,7 @@ type activeUserLister interface {
 
 type dailyPurchaseGuard interface {
 	HasSuccessfulExecutionOfTypeSince(loadContext context.Context, userIdentifier int64, environment string, operationType string, tradingPairSymbol string, since time.Time) (bool, error)
+	HasFailedExecutionOfTypeSince(loadContext context.Context, userIdentifier int64, environment string, operationType string, tradingPairSymbol string, since time.Time) (bool, error)
 }
 
 // workerStalledAlerter is notified when the worker's heartbeat goes stale (e.g. a stuck loop while the
@@ -390,7 +391,7 @@ func (worker *AutomationWorker) processOpenOperation(applicationContext context.
 
 	sellResponse, sellError := tradingService.PlaceMarketSellByQuantity(applicationContext, operation.TradingPairSymbol, operation.QuantityPurchased)
 	if sellError != nil {
-		worker.logSellExecution(applicationContext, userIdentifier, operation.BinanceEnvironment, domain.ExecutionInitiatorBot, operation.TradingPairSymbol, currentPrice, operation.QuantityPurchased, false, sellError, nil)
+		worker.logBotSellFailureOncePerDay(applicationContext, userIdentifier, operation, currentPrice, sellError)
 		log.Printf("automation: stop-loss market sell failed for operation %d (user %d): %v", operation.Identifier, userIdentifier, sellError)
 		return
 	}
@@ -451,6 +452,20 @@ func (worker *AutomationWorker) logTakeProfitEvent(applicationContext context.Co
 		Success:            true,
 		OrderIdentifier:    operation.SellOrderIdentifier,
 	})
+}
+
+// logBotSellFailureOncePerDay caps the failed stop-loss SELL history rows the same way the daily buy
+// is capped: a position whose sell keeps failing is retried on every 30s monitor tick, so an
+// unguarded log would write ~2880 rows/day. One failed SELL row per pair per UTC day warns just fine
+// (the warning icon reads only the latest row anyway). Fail-open on a guard read error.
+func (worker *AutomationWorker) logBotSellFailureOncePerDay(applicationContext context.Context, userIdentifier int64, operation domain.TradingOperation, unitPrice float64, cause error) {
+	nowUTC := time.Now().UTC()
+	startOfDayUTC := time.Date(nowUTC.Year(), nowUTC.Month(), nowUTC.Day(), 0, 0, 0, 0, time.UTC)
+	alreadyLogged, guardError := worker.purchaseGuard.HasFailedExecutionOfTypeSince(applicationContext, userIdentifier, operation.BinanceEnvironment, domain.TradingOperationTypeSell, operation.TradingPairSymbol, startOfDayUTC)
+	if guardError == nil && alreadyLogged {
+		return
+	}
+	worker.logSellExecution(applicationContext, userIdentifier, operation.BinanceEnvironment, domain.ExecutionInitiatorBot, operation.TradingPairSymbol, unitPrice, operation.QuantityPurchased, false, cause, nil)
 }
 
 func (worker *AutomationWorker) logSellExecution(applicationContext context.Context, userIdentifier int64, environment string, initiatedBy string, tradingPairSymbol string, unitPrice float64, quantity float64, success bool, cause error, orderIdentifier *string) {
@@ -553,8 +568,32 @@ func (worker *AutomationWorker) processDailyPurchasesForUser(applicationContext 
 		log.Printf("automation: running daily purchase for user %d robot %d (%s)", userIdentifier, robot.Identifier, robot.TradingPairSymbol)
 		if _, purchaseError := worker.tradingService.ExecuteDailyPurchase(applicationContext, userIdentifier, environmentName, robot.TradingPairSymbol, robot.CapitalThreshold, robot.TargetProfitPercent, robot.SellOrderValidityDays); purchaseError != nil {
 			log.Printf("automation: daily purchase failed for user %d robot %d: %v", userIdentifier, robot.Identifier, purchaseError)
+			worker.logDailyPurchaseFailureOncePerDay(applicationContext, userIdentifier, environmentName, robot, purchaseError, startOfDayUTC)
 		}
 	}
+}
+
+// logDailyPurchaseFailureOncePerDay records a failed DAILY_BUY history row (and thus the robot's
+// warning icon) at most once per robot per day. The worker still retries on every tick within the
+// target hour — a later success supersedes the warning; only the history spam is capped.
+func (worker *AutomationWorker) logDailyPurchaseFailureOncePerDay(applicationContext context.Context, userIdentifier int64, environmentName string, robot domain.TradingRobot, cause error, startOfDayUTC time.Time) {
+	alreadyLogged, guardError := worker.purchaseGuard.HasFailedExecutionOfTypeSince(applicationContext, userIdentifier, environmentName, domain.TradingOperationTypeDailyBuy, robot.TradingPairSymbol, startOfDayUTC)
+	// Fail OPEN on a guard read error: the guard only de-duplicates, and a transient DB error must
+	// not silently drop the failure row (worst case is one duplicate, not a lost warning).
+	if guardError == nil && alreadyLogged {
+		return
+	}
+	message := cause.Error()
+	_, _ = worker.executionRepository.LogExecutionForUser(applicationContext, userIdentifier, domain.TradingOperationExecution{
+		TradingPairSymbol:  robot.TradingPairSymbol,
+		OperationType:      domain.TradingOperationTypeDailyBuy,
+		BinanceEnvironment: environmentName,
+		InitiatedBy:        domain.ExecutionInitiatorBot,
+		TotalValue:         robot.CapitalThreshold, // the intended spend; no price/quantity — nothing executed
+		ExecutedAt:         time.Now(),
+		Success:            false,
+		ErrorMessage:       &message,
+	})
 }
 
 func fillPriceFromStatus(orderStatus BinanceOrderStatus, fallbackPrice float64) float64 {
